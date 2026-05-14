@@ -501,331 +501,335 @@ with tab4:
             hide_index=True,
         )
 
+
 # ─────────────────────────────────────────────────────
 # TAB 5 — Stock Analysis
 # ─────────────────────────────────────────────────────
 with tab5:
-    if not portfolio:
-        st.info("No portfolio data — load trades from IBKR first.")
-    else:
-        # Symbol selector
-        sym_col, btn_col = st.columns([3, 1])
-        with sym_col:
-            selected_symbol = st.selectbox(
-                "Symbol",
-                options=sorted(portfolio.keys()),
-                label_visibility="collapsed",
+    # Symbol input — free text so any ticker can be analyzed, not just held ones
+    portfolio_syms = sorted(portfolio.keys()) if portfolio else []
+    sym_col, btn_col = st.columns([3, 1])
+    with sym_col:
+        _default_sym = st.session_state.get("_sa_sym", portfolio_syms[0] if portfolio_syms else "AAPL")
+        selected_symbol = st.text_input(
+            "Symbol",
+            value=_default_sym,
+            placeholder="Enter any ticker, e.g. NVDA, TSLA, SPY …",
+            label_visibility="collapsed",
+        ).strip().upper()
+        if portfolio_syms:
+            _quick = st.selectbox(
+                "Quick-pick from your portfolio",
+                options=["— pick —"] + portfolio_syms,
+                index=0,
             )
-        with btn_col:
-            run_analysis = st.button("Analyze", type="primary", use_container_width=True)
+            if _quick != "— pick —":
+                selected_symbol = _quick
+    with btn_col:
+        st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+        run_analysis = st.button("Analyze", type="primary", use_container_width=True)
 
-        if run_analysis or ("_sa_cache" in st.session_state and st.session_state.get("_sa_sym") == selected_symbol):
-            if run_analysis or "_sa_cache" not in st.session_state:
-                with st.spinner(f"Fetching data for {selected_symbol}..."):
-                    analysis = get_stock_analysis(selected_symbol)
-                    st.session_state["_sa_cache"] = analysis
-                    st.session_state["_sa_sym"] = selected_symbol
-            else:
-                analysis = st.session_state["_sa_cache"]
+    if selected_symbol and (run_analysis or ("_sa_cache" in st.session_state and st.session_state.get("_sa_sym") == selected_symbol)):
+        if run_analysis or "_sa_cache" not in st.session_state:
+            with st.spinner(f"Fetching data for {selected_symbol}..."):
+                analysis = get_stock_analysis(selected_symbol)
+                st.session_state["_sa_cache"] = analysis
+                st.session_state["_sa_sym"] = selected_symbol
+        else:
+            analysis = st.session_state["_sa_cache"]
 
-            if analysis.get("error"):
-                st.error(analysis["error"])
-            else:
-                info_row = analysis
-                val = analysis["valuation"]
-                fund = analysis["fundamentals"]
-                tech = analysis["technicals"]
-                analyst = analysis["analyst"]
-                inst = analysis["institutional"]
-                earn = analysis["earnings"]
+        if analysis.get("error"):
+            st.error(analysis["error"])
+        else:
+            info_row = analysis
+            val = analysis["valuation"]
+            fund = analysis["fundamentals"]
+            tech = analysis["technicals"]
+            analyst = analysis["analyst"]
+            inst = analysis["institutional"]
+            earn = analysis["earnings"]
 
-                # ── Header row ──
-                mc = info_row.get("market_cap")
-                mc_str = f"${mc/1e9:.1f}B" if mc and mc >= 1e9 else (f"${mc/1e6:.0f}M" if mc else "—")
-                st.markdown(
-                    f"<div style='margin-bottom:16px'>"
-                    f"<span style='font-size:1.3rem;font-weight:700;color:#e8ecf0'>{selected_symbol}</span>"
-                    f"<span style='color:#7a8fb5;margin-left:10px;font-size:0.9rem'>{info_row.get('name','')}</span>"
-                    f"<span class='stat-chip' style='margin-left:12px'>{info_row.get('sector','—')}</span>"
-                    f"<span class='stat-chip'>{info_row.get('industry','—')}</span>"
-                    f"<span class='stat-chip'>Mkt Cap {mc_str}</span>"
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
+            # ── Header row ──
+            mc = info_row.get("market_cap")
+            mc_str = f"${mc/1e9:.1f}B" if mc and mc >= 1e9 else (f"${mc/1e6:.0f}M" if mc else "—")
+            st.markdown(
+                f"<div style='margin-bottom:16px'>"
+                f"<span style='font-size:1.3rem;font-weight:700;color:#e8ecf0'>{selected_symbol}</span>"
+                f"<span style='color:#7a8fb5;margin-left:10px;font-size:0.9rem'>{info_row.get('name','')}</span>"
+                f"<span class='stat-chip' style='margin-left:12px'>{info_row.get('sector','—')}</span>"
+                f"<span class='stat-chip'>{info_row.get('industry','—')}</span>"
+                f"<span class='stat-chip'>Mkt Cap {mc_str}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
 
-                # ── Row 1: Valuation + Fundamentals metrics ──
-                st.markdown("<div class='section-header'>Valuation Multiples & Key Fundamentals</div>", unsafe_allow_html=True)
-                cols = st.columns(6)
-                metrics_row1 = [
-                    ("Fwd P/E",    val.get("Forward P/E")),
-                    ("EV/EBITDA",  val.get("EV/EBITDA")),
-                    ("P/S",        val.get("P/S")),
-                    ("P/FCF",      val.get("P/FCF")),
-                    ("PEG",        val.get("PEG")),
-                    ("P/B",        val.get("P/B")),
-                ]
-                for col, (label, v) in zip(cols, metrics_row1):
-                    disp = _fmt(v, ".1f") if v is not None else "—"
-                    col.metric(label, disp)
+            # ── Row 1: Valuation + Fundamentals metrics ──
+            st.markdown("<div class='section-header'>Valuation Multiples & Key Fundamentals</div>", unsafe_allow_html=True)
+            cols = st.columns(6)
+            metrics_row1 = [
+                ("Fwd P/E",   val.get("Forward P/E")),
+                ("EV/EBITDA", val.get("EV/EBITDA")),
+                ("P/S",       val.get("P/S")),
+                ("P/FCF",     val.get("P/FCF")),
+                ("PEG",       val.get("PEG")),
+                ("P/B",       val.get("P/B")),
+            ]
+            for col, (label, v) in zip(cols, metrics_row1):
+                disp = _fmt(v, ".1f") if v is not None else "—"
+                col.metric(label, disp)
 
-                cols2 = st.columns(6)
-                metrics_row2 = [
-                    ("Gross Margin",   fund.get("Gross Margin"),    "%"),
-                    ("Op Margin",      fund.get("Operating Margin"), "%"),
-                    ("Net Margin",     fund.get("Net Margin"),       "%"),
-                    ("ROE",            fund.get("ROE"),              "%"),
-                    ("Rev Growth YoY", fund.get("Revenue Growth YoY"), "%"),
-                    ("Debt/Equity",    fund.get("Debt/Equity"),     "x"),
-                ]
-                for col, (label, v, sfx) in zip(cols2, metrics_row2):
-                    disp = (f"{v:+.1f}{sfx}" if sfx == "%" else f"{v:.2f}{sfx}") if v is not None else "—"
-                    delta_c = "normal" if v is None else ("normal" if (sfx == "x" or v >= 0) else "inverse")
-                    col.metric(label, disp)
+            cols2 = st.columns(6)
+            metrics_row2 = [
+                ("Gross Margin",    fund.get("Gross Margin"),        "%"),
+                ("Op Margin",       fund.get("Operating Margin"),    "%"),
+                ("Net Margin",      fund.get("Net Margin"),          "%"),
+                ("ROE",             fund.get("ROE"),                 "%"),
+                ("Rev Growth YoY",  fund.get("Revenue Growth YoY"), "%"),
+                ("Debt/Equity",     fund.get("Debt/Equity"),        "x"),
+            ]
+            for col, (label, v, sfx) in zip(cols2, metrics_row2):
+                disp = (f"{v:+.1f}{sfx}" if sfx == "%" else f"{v:.2f}{sfx}") if v is not None else "—"
+                col.metric(label, disp)
 
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # ── Row 2: 3-column layout ──
+            col_analyst, col_tech, col_earn = st.columns([1, 1, 1])
+
+            # ── Analyst Consensus ──
+            with col_analyst:
+                st.markdown("<div class='section-header'>Analyst Consensus</div>", unsafe_allow_html=True)
+                rating = analyst.get("overall_rating", "—")
+                rating_class = {
+                    "Strong Buy": "rating-strong-buy",
+                    "Buy":        "rating-buy",
+                    "Hold":       "rating-hold",
+                    "Sell":       "rating-sell",
+                }.get(rating, "rating-na")
+                st.markdown(f"<span class='rating-badge {rating_class}'>{rating}</span>", unsafe_allow_html=True)
                 st.markdown("<br>", unsafe_allow_html=True)
 
-                # ── Row 2: 3-column layout ──
-                col_analyst, col_tech, col_earn = st.columns([1, 1, 1])
+                mean_t = analyst.get("mean_target")
+                high_t = analyst.get("high_target")
+                low_t  = analyst.get("low_target")
+                upside = analyst.get("upside_pct")
+                curr   = analyst.get("current_price") or tech.get("price")
 
-                # ── Analyst Consensus ──
-                with col_analyst:
-                    st.markdown("<div class='section-header'>Analyst Consensus</div>", unsafe_allow_html=True)
-                    rating = analyst.get("overall_rating", "—")
-                    rating_class = {
-                        "Strong Buy": "rating-strong-buy",
-                        "Buy": "rating-buy",
-                        "Hold": "rating-hold",
-                        "Sell": "rating-sell",
-                    }.get(rating, "rating-na")
-                    st.markdown(f"<span class='rating-badge {rating_class}'>{rating}</span>", unsafe_allow_html=True)
-                    st.markdown("<br>", unsafe_allow_html=True)
-
-                    mean_t = analyst.get("mean_target")
-                    high_t = analyst.get("high_target")
-                    low_t  = analyst.get("low_target")
-                    upside = analyst.get("upside_pct")
-                    curr   = analyst.get("current_price") or tech.get("price")
-
-                    if curr:
-                        st.metric("Current Price", f"${curr:,.2f}")
-                    if mean_t:
-                        upside_str = f"{upside:+.1f}% upside" if upside is not None else ""
-                        st.metric("Mean Target", f"${float(mean_t):,.2f}", delta=upside_str)
-                    if high_t and low_t:
-                        st.markdown(
-                            f"<div style='color:#7a8fb5;font-size:0.78rem;margin-top:4px'>"
-                            f"Range: <span style='color:#00c8a0'>${float(high_t):,.2f}</span>"
-                            f" / <span style='color:#ff4d6d'>${float(low_t):,.2f}</span></div>",
-                            unsafe_allow_html=True,
-                        )
-
-                    rc = analyst.get("rating_counts", {})
-                    if rc:
-                        st.markdown("<br>", unsafe_allow_html=True)
-                        total_rc = sum(rc.values())
-                        for label, count in sorted(rc.items(), key=lambda x: -x[1]):
-                            pct_rc = count / total_rc * 100 if total_rc > 0 else 0
-                            bar_color = "#00c8a0" if "BUY" in label.upper() else ("#ff4d6d" if "SELL" in label.upper() else "#f4c542")
-                            st.markdown(
-                                f"<div style='margin-bottom:6px'>"
-                                f"<div style='display:flex;justify-content:space-between;font-size:0.75rem;color:#c8d4e8;margin-bottom:2px'>"
-                                f"<span>{label}</span><span>{count}</span></div>"
-                                f"<div style='background:#1e2a42;border-radius:3px;height:5px'>"
-                                f"<div style='background:{bar_color};width:{pct_rc:.0f}%;height:5px;border-radius:3px'></div>"
-                                f"</div></div>",
-                                unsafe_allow_html=True,
-                            )
-
-                # ── Technicals ──
-                with col_tech:
-                    st.markdown("<div class='section-header'>Technical Indicators</div>", unsafe_allow_html=True)
-
-                    rsi = tech.get("rsi")
-                    if rsi is not None:
-                        rsi_color = "#ff4d6d" if rsi > 70 else ("#00c8a0" if rsi < 30 else "#f4c542")
-                        rsi_label = "Overbought" if rsi > 70 else ("Oversold" if rsi < 30 else "Neutral")
-                        st.markdown(
-                            f"<div style='margin-bottom:10px'>"
-                            f"<span style='color:#7a8fb5;font-size:0.75rem'>RSI (14)</span><br>"
-                            f"<span style='font-size:1.6rem;font-weight:700;color:{rsi_color}'>{rsi}</span>"
-                            f"<span style='color:{rsi_color};font-size:0.75rem;margin-left:6px'>{rsi_label}</span>"
-                            f"</div>",
-                            unsafe_allow_html=True,
-                        )
-
-                    macd = tech.get("macd_signal", "—")
-                    macd_color = "#00c8a0" if macd == "Bullish" else ("#ff4d6d" if macd == "Bearish" else "#7a8fb5")
-                    bb = tech.get("bb_position")
-                    rel_vol = tech.get("rel_volume")
-                    w52_pct = tech.get("week52_pct")
-
-                    chip_items = [
-                        ("MACD", macd, macd_color),
-                        ("BB Position", f"{bb:.0f}%" if bb is not None else "—", "#c8d4e8"),
-                        ("Rel Volume", f"{rel_vol:.2f}x" if rel_vol is not None else "—", "#00c8a0" if rel_vol and rel_vol > 1.5 else "#c8d4e8"),
-                        ("52W Range", f"{w52_pct:.0f}%" if w52_pct is not None else "—", "#c8d4e8"),
-                    ]
-                    for label, val_s, color in chip_items:
-                        st.markdown(
-                            f"<div style='display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #1e2a42'>"
-                            f"<span style='color:#7a8fb5;font-size:0.78rem'>{label}</span>"
-                            f"<span style='color:{color};font-size:0.78rem;font-weight:600'>{val_s}</span>"
-                            f"</div>",
-                            unsafe_allow_html=True,
-                        )
-
-                    # MA status
-                    price_now = tech.get("price")
-                    if price_now:
-                        st.markdown("<div style='margin-top:10px;color:#7a8fb5;font-size:0.72rem;letter-spacing:0.05em'>PRICE vs MOVING AVERAGES</div>", unsafe_allow_html=True)
-                        for label, ma_key, diff_key in [("MA 20", "ma20", "price_vs_ma20"), ("MA 50", "ma50", "price_vs_ma50"), ("MA 200", "ma200", "price_vs_ma200")]:
-                            ma_val = tech.get(ma_key)
-                            diff = tech.get(diff_key)
-                            if ma_val is not None and diff is not None:
-                                c = "#00c8a0" if diff >= 0 else "#ff4d6d"
-                                sign = "+" if diff >= 0 else ""
-                                st.markdown(
-                                    f"<div style='display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1e2a42'>"
-                                    f"<span style='color:#7a8fb5;font-size:0.75rem'>{label}  <span style='color:#4a5a78'>${ma_val:,.2f}</span></span>"
-                                    f"<span style='color:{c};font-size:0.75rem;font-weight:600'>{sign}{diff:.1f}%</span>"
-                                    f"</div>",
-                                    unsafe_allow_html=True,
-                                )
-
-                # ── Earnings Momentum ──
-                with col_earn:
-                    st.markdown("<div class='section-header'>Earnings Momentum</div>", unsafe_allow_html=True)
-
-                    next_e = earn.get("next_earnings", "—")
-                    eps_trend = earn.get("eps_trend", "—")
-                    trend_color = "#00c8a0" if eps_trend == "Improving" else ("#ff4d6d" if eps_trend == "Declining" else "#f4c542")
-
+                if curr:
+                    st.metric("Current Price", f"${curr:,.2f}")
+                if mean_t:
+                    upside_str = f"{upside:+.1f}% upside" if upside is not None else ""
+                    st.metric("Mean Target", f"${float(mean_t):,.2f}", delta=upside_str)
+                if high_t and low_t:
                     st.markdown(
-                        f"<div style='margin-bottom:12px'>"
-                        f"<div style='display:flex;justify-content:space-between;margin-bottom:6px'>"
-                        f"<span style='color:#7a8fb5;font-size:0.75rem'>Next Earnings</span>"
-                        f"<span style='color:#c8d4e8;font-size:0.75rem;font-weight:600'>{next_e}</span>"
-                        f"</div>"
-                        f"<div style='display:flex;justify-content:space-between'>"
-                        f"<span style='color:#7a8fb5;font-size:0.75rem'>EPS Trend</span>"
-                        f"<span style='color:{trend_color};font-size:0.75rem;font-weight:600'>{eps_trend}</span>"
-                        f"</div></div>",
+                        f"<div style='color:#7a8fb5;font-size:0.78rem;margin-top:4px'>"
+                        f"Range: <span style='color:#00c8a0'>${float(high_t):,.2f}</span>"
+                        f" / <span style='color:#ff4d6d'>${float(low_t):,.2f}</span></div>",
                         unsafe_allow_html=True,
                     )
 
-                    eps_hist = earn.get("eps_history", pd.DataFrame())
-                    if not eps_hist.empty:
-                        st.markdown("<div style='color:#7a8fb5;font-size:0.72rem;letter-spacing:0.05em;margin-bottom:6px'>EPS HISTORY (LAST 4Q)</div>", unsafe_allow_html=True)
-                        rename_map = {
-                            "quarter": "Quarter",
-                            "epsActual": "Actual",
-                            "epsEstimate": "Estimate",
-                            "surprisePercent": "Surprise %",
-                        }
-                        eps_show = eps_hist.rename(columns={k: v for k, v in rename_map.items() if k in eps_hist.columns})
+                rc = analyst.get("rating_counts", {})
+                if rc:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    total_rc = sum(rc.values())
+                    for label, count in sorted(rc.items(), key=lambda x: -x[1]):
+                        pct_rc = count / total_rc * 100 if total_rc > 0 else 0
+                        bar_color = "#00c8a0" if "BUY" in label.upper() else ("#ff4d6d" if "SELL" in label.upper() else "#f4c542")
+                        st.markdown(
+                            f"<div style='margin-bottom:6px'>"
+                            f"<div style='display:flex;justify-content:space-between;font-size:0.75rem;color:#c8d4e8;margin-bottom:2px'>"
+                            f"<span>{label}</span><span>{count}</span></div>"
+                            f"<div style='background:#1e2a42;border-radius:3px;height:5px'>"
+                            f"<div style='background:{bar_color};width:{pct_rc:.0f}%;height:5px;border-radius:3px'></div>"
+                            f"</div></div>",
+                            unsafe_allow_html=True,
+                        )
 
-                        def _color_surprise(val):
-                            try:
-                                f = float(val)
-                                if f > 0:
-                                    return "background-color:#003d2e;color:#00c8a0"
-                                if f < 0:
-                                    return "background-color:#3d0015;color:#ff4d6d"
-                            except Exception:
-                                pass
-                            return ""
+            # ── Technicals ──
+            with col_tech:
+                st.markdown("<div class='section-header'>Technical Indicators</div>", unsafe_allow_html=True)
 
-                        fmt_eps = {}
-                        for c in eps_show.columns:
-                            if c in ("Actual", "Estimate"):
-                                fmt_eps[c] = lambda x: _fmt(x, ".2f")
-                            elif c == "Surprise %":
-                                fmt_eps[c] = lambda x: _fmt(x, ".1f", "%")
-                        sty_eps = eps_show.style.format(fmt_eps, na_rep="—")
-                        if "Surprise %" in eps_show.columns:
-                            sty_eps = sty_eps.applymap(_color_surprise, subset=["Surprise %"])
-                        st.dataframe(sty_eps, use_container_width=True, hide_index=True, height=180)
-
-                # ── Row 3: Institutional ──
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown("<div class='section-header'>Institutional Ownership</div>", unsafe_allow_html=True)
-                inst_col, insider_col = st.columns([3, 1])
-
-                with inst_col:
-                    top_h = inst.get("top_holders", pd.DataFrame())
-                    if not top_h.empty:
-                        pct_col = next((c for c in top_h.columns if "%" in c or "out" in c.lower()), None)
-                        fmt_inst = {}
-                        if pct_col:
-                            fmt_inst[pct_col] = lambda x: _fmt(x, ".2f", "%")
-                        if "Value" in top_h.columns:
-                            fmt_inst["Value"] = lambda x: _fmt(x, ",.0f")
-                        st.dataframe(top_h.style.format(fmt_inst, na_rep="—"), use_container_width=True, hide_index=True)
-                    else:
-                        st.caption("No institutional data available.")
-
-                with insider_col:
-                    insider_dir = inst.get("insider_direction", "—")
-                    dir_color = "#00c8a0" if insider_dir == "Net Buying" else ("#ff4d6d" if insider_dir == "Net Selling" else "#f4c542")
-                    dir_icon = "↑" if insider_dir == "Net Buying" else ("↓" if insider_dir == "Net Selling" else "↔")
+                rsi = tech.get("rsi")
+                if rsi is not None:
+                    rsi_color = "#ff4d6d" if rsi > 70 else ("#00c8a0" if rsi < 30 else "#f4c542")
+                    rsi_label = "Overbought" if rsi > 70 else ("Oversold" if rsi < 30 else "Neutral")
                     st.markdown(
-                        f"<div style='background:#141a2e;border:1px solid #1e2a42;border-radius:8px;padding:16px;text-align:center'>"
-                        f"<div style='color:#7a8fb5;font-size:0.72rem;letter-spacing:0.08em;margin-bottom:8px'>INSIDER ACTIVITY</div>"
-                        f"<div style='font-size:2rem;color:{dir_color}'>{dir_icon}</div>"
-                        f"<div style='color:{dir_color};font-weight:700;font-size:0.85rem;margin-top:4px'>{insider_dir}</div>"
-                        f"<div style='color:#4a5a78;font-size:0.7rem;margin-top:4px'>Last 90 days</div>"
+                        f"<div style='margin-bottom:10px'>"
+                        f"<span style='color:#7a8fb5;font-size:0.75rem'>RSI (14)</span><br>"
+                        f"<span style='font-size:1.6rem;font-weight:700;color:{rsi_color}'>{rsi}</span>"
+                        f"<span style='color:{rsi_color};font-size:0.75rem;margin-left:6px'>{rsi_label}</span>"
                         f"</div>",
                         unsafe_allow_html=True,
                     )
 
-                # ── Row 4: Price chart ──
-                st.markdown("<br>", unsafe_allow_html=True)
-                st.markdown("<div class='section-header'>Price & Volume (6 Months)</div>", unsafe_allow_html=True)
-                try:
-                    import yfinance as yf
-                    hist_chart = yf.Ticker(selected_symbol).history(period="6mo")
-                    if hist_chart is not None and not hist_chart.empty:
-                        fig_price = go.Figure()
-                        # Candlestick
-                        fig_price.add_trace(go.Candlestick(
-                            x=hist_chart.index,
-                            open=hist_chart["Open"],
-                            high=hist_chart["High"],
-                            low=hist_chart["Low"],
-                            close=hist_chart["Close"],
-                            increasing_line_color="#00c8a0",
-                            decreasing_line_color="#ff4d6d",
-                            name="Price",
-                        ))
-                        # MA overlays
-                        for n, color, name in [(20, "#f4c542", "MA20"), (50, "#7a8fb5", "MA50")]:
-                            if len(hist_chart) >= n:
-                                fig_price.add_trace(go.Scatter(
-                                    x=hist_chart.index,
-                                    y=hist_chart["Close"].rolling(n).mean(),
-                                    line=dict(color=color, width=1.2, dash="dot"),
-                                    name=name,
-                                    opacity=0.8,
-                                ))
-                        fig_price.update_layout(
-                            template="plotly_dark",
-                            paper_bgcolor="#0a0e1a",
-                            plot_bgcolor="#0f1525",
-                            xaxis=dict(gridcolor="#1e2a42", color="#7a8fb5", rangeslider_visible=False),
-                            yaxis=dict(gridcolor="#1e2a42", color="#7a8fb5"),
-                            legend=dict(orientation="h", y=1.05, font=dict(size=10, color="#7a8fb5")),
-                            margin=dict(l=10, r=10, t=10, b=10),
-                            height=340,
-                        )
-                        st.plotly_chart(fig_price, use_container_width=True)
-                except Exception:
-                    st.caption("Price chart unavailable.")
+                macd = tech.get("macd_signal", "—")
+                macd_color = "#00c8a0" if macd == "Bullish" else ("#ff4d6d" if macd == "Bearish" else "#7a8fb5")
+                bb = tech.get("bb_position")
+                rel_vol = tech.get("rel_volume")
+                w52_pct = tech.get("week52_pct")
 
-        else:
-            st.markdown(
-                "<div style='text-align:center;padding:60px 0;color:#7a8fb5'>"
-                "<div style='font-size:2rem;margin-bottom:8px'>◈</div>"
-                "<div>Select a symbol and click <strong style='color:#00c8a0'>Analyze</strong></div>"
-                "</div>",
-                unsafe_allow_html=True,
-            )
+                chip_items = [
+                    ("MACD",       macd,                                                  macd_color),
+                    ("BB Position", f"{bb:.0f}%" if bb is not None else "—",             "#c8d4e8"),
+                    ("Rel Volume",  f"{rel_vol:.2f}x" if rel_vol is not None else "—",   "#00c8a0" if rel_vol and rel_vol > 1.5 else "#c8d4e8"),
+                    ("52W Range",   f"{w52_pct:.0f}%" if w52_pct is not None else "—",   "#c8d4e8"),
+                ]
+                for lbl, val_s, color in chip_items:
+                    st.markdown(
+                        f"<div style='display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #1e2a42'>"
+                        f"<span style='color:#7a8fb5;font-size:0.78rem'>{lbl}</span>"
+                        f"<span style='color:{color};font-size:0.78rem;font-weight:600'>{val_s}</span>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                price_now = tech.get("price")
+                if price_now:
+                    st.markdown("<div style='margin-top:10px;color:#7a8fb5;font-size:0.72rem;letter-spacing:0.05em'>PRICE vs MOVING AVERAGES</div>", unsafe_allow_html=True)
+                    for ma_lbl, ma_key, diff_key in [("MA 20", "ma20", "price_vs_ma20"), ("MA 50", "ma50", "price_vs_ma50"), ("MA 200", "ma200", "price_vs_ma200")]:
+                        ma_val = tech.get(ma_key)
+                        diff = tech.get(diff_key)
+                        if ma_val is not None and diff is not None:
+                            c = "#00c8a0" if diff >= 0 else "#ff4d6d"
+                            sign = "+" if diff >= 0 else ""
+                            st.markdown(
+                                f"<div style='display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1e2a42'>"
+                                f"<span style='color:#7a8fb5;font-size:0.75rem'>{ma_lbl}  <span style='color:#4a5a78'>${ma_val:,.2f}</span></span>"
+                                f"<span style='color:{c};font-size:0.75rem;font-weight:600'>{sign}{diff:.1f}%</span>"
+                                f"</div>",
+                                unsafe_allow_html=True,
+                            )
+
+            # ── Earnings Momentum ──
+            with col_earn:
+                st.markdown("<div class='section-header'>Earnings Momentum</div>", unsafe_allow_html=True)
+
+                next_e = earn.get("next_earnings", "—")
+                eps_trend = earn.get("eps_trend", "—")
+                trend_color = "#00c8a0" if eps_trend == "Improving" else ("#ff4d6d" if eps_trend == "Declining" else "#f4c542")
+
+                st.markdown(
+                    f"<div style='margin-bottom:12px'>"
+                    f"<div style='display:flex;justify-content:space-between;margin-bottom:6px'>"
+                    f"<span style='color:#7a8fb5;font-size:0.75rem'>Next Earnings</span>"
+                    f"<span style='color:#c8d4e8;font-size:0.75rem;font-weight:600'>{next_e}</span>"
+                    f"</div>"
+                    f"<div style='display:flex;justify-content:space-between'>"
+                    f"<span style='color:#7a8fb5;font-size:0.75rem'>EPS Trend</span>"
+                    f"<span style='color:{trend_color};font-size:0.75rem;font-weight:600'>{eps_trend}</span>"
+                    f"</div></div>",
+                    unsafe_allow_html=True,
+                )
+
+                eps_hist = earn.get("eps_history", pd.DataFrame())
+                if not eps_hist.empty:
+                    st.markdown("<div style='color:#7a8fb5;font-size:0.72rem;letter-spacing:0.05em;margin-bottom:6px'>EPS HISTORY (LAST 4Q)</div>", unsafe_allow_html=True)
+                    rename_map = {
+                        "quarter": "Quarter", "epsActual": "Actual",
+                        "epsEstimate": "Estimate", "surprisePercent": "Surprise %",
+                    }
+                    eps_show = eps_hist.rename(columns={k: v for k, v in rename_map.items() if k in eps_hist.columns})
+
+                    def _color_surprise(val):
+                        try:
+                            f = float(val)
+                            if f > 0:
+                                return "background-color:#003d2e;color:#00c8a0"
+                            if f < 0:
+                                return "background-color:#3d0015;color:#ff4d6d"
+                        except Exception:
+                            pass
+                        return ""
+
+                    fmt_eps = {}
+                    for c in eps_show.columns:
+                        if c in ("Actual", "Estimate"):
+                            fmt_eps[c] = lambda x: _fmt(x, ".2f")
+                        elif c == "Surprise %":
+                            fmt_eps[c] = lambda x: _fmt(x, ".1f", "%")
+                    sty_eps = eps_show.style.format(fmt_eps, na_rep="—")
+                    if "Surprise %" in eps_show.columns:
+                        sty_eps = sty_eps.applymap(_color_surprise, subset=["Surprise %"])
+                    st.dataframe(sty_eps, use_container_width=True, hide_index=True, height=180)
+
+            # ── Row 3: Institutional ──
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("<div class='section-header'>Institutional Ownership</div>", unsafe_allow_html=True)
+            inst_col, insider_col = st.columns([3, 1])
+
+            with inst_col:
+                top_h = inst.get("top_holders", pd.DataFrame())
+                if not top_h.empty:
+                    pct_col = next((c for c in top_h.columns if "%" in c or "out" in c.lower()), None)
+                    fmt_inst = {}
+                    if pct_col:
+                        fmt_inst[pct_col] = lambda x: _fmt(x, ".2f", "%")
+                    if "Value" in top_h.columns:
+                        fmt_inst["Value"] = lambda x: _fmt(x, ",.0f")
+                    st.dataframe(top_h.style.format(fmt_inst, na_rep="—"), use_container_width=True, hide_index=True)
+                else:
+                    st.caption("No institutional data available.")
+
+            with insider_col:
+                insider_dir = inst.get("insider_direction", "—")
+                dir_color = "#00c8a0" if insider_dir == "Net Buying" else ("#ff4d6d" if insider_dir == "Net Selling" else "#f4c542")
+                dir_icon = "↑" if insider_dir == "Net Buying" else ("↓" if insider_dir == "Net Selling" else "↔")
+                st.markdown(
+                    f"<div style='background:#141a2e;border:1px solid #1e2a42;border-radius:8px;padding:16px;text-align:center'>"
+                    f"<div style='color:#7a8fb5;font-size:0.72rem;letter-spacing:0.08em;margin-bottom:8px'>INSIDER ACTIVITY</div>"
+                    f"<div style='font-size:2rem;color:{dir_color}'>{dir_icon}</div>"
+                    f"<div style='color:{dir_color};font-weight:700;font-size:0.85rem;margin-top:4px'>{insider_dir}</div>"
+                    f"<div style='color:#4a5a78;font-size:0.7rem;margin-top:4px'>Last 90 days</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+            # ── Row 4: Price chart ──
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("<div class='section-header'>Price & Volume (6 Months)</div>", unsafe_allow_html=True)
+            try:
+                import yfinance as yf
+                hist_chart = yf.Ticker(selected_symbol).history(period="6mo")
+                if hist_chart is not None and not hist_chart.empty:
+                    fig_price = go.Figure()
+                    fig_price.add_trace(go.Candlestick(
+                        x=hist_chart.index,
+                        open=hist_chart["Open"],
+                        high=hist_chart["High"],
+                        low=hist_chart["Low"],
+                        close=hist_chart["Close"],
+                        increasing_line_color="#00c8a0",
+                        decreasing_line_color="#ff4d6d",
+                        name="Price",
+                    ))
+                    for n, color, name in [(20, "#f4c542", "MA20"), (50, "#7a8fb5", "MA50")]:
+                        if len(hist_chart) >= n:
+                            fig_price.add_trace(go.Scatter(
+                                x=hist_chart.index,
+                                y=hist_chart["Close"].rolling(n).mean(),
+                                line=dict(color=color, width=1.2, dash="dot"),
+                                name=name,
+                                opacity=0.8,
+                            ))
+                    fig_price.update_layout(
+                        template="plotly_dark",
+                        paper_bgcolor="#0a0e1a",
+                        plot_bgcolor="#0f1525",
+                        xaxis=dict(gridcolor="#1e2a42", color="#7a8fb5", rangeslider_visible=False),
+                        yaxis=dict(gridcolor="#1e2a42", color="#7a8fb5"),
+                        legend=dict(orientation="h", y=1.05, font=dict(size=10, color="#7a8fb5")),
+                        margin=dict(l=10, r=10, t=10, b=10),
+                        height=340,
+                    )
+                    st.plotly_chart(fig_price, use_container_width=True)
+            except Exception:
+                st.caption("Price chart unavailable.")
+
+    else:
+        st.markdown(
+            "<div style='text-align:center;padding:60px 0;color:#7a8fb5'>"
+            "<div style='font-size:2rem;margin-bottom:8px'>◈</div>"
+            "<div>Enter a ticker above and click <strong style='color:#00c8a0'>Analyze</strong></div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
