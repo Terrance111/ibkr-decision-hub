@@ -1,0 +1,11 @@
+streamlit
+pandas
+numpy
+plotly
+requests
+yfinance
+feedparser
+joblib
+python-dotenv
+lxml
+beautifulsoup4
