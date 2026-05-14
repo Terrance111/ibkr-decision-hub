@@ -33,7 +33,7 @@ I built this tool to solve that — and more:
 - **Dual Portfolio Views** — Current holdings (from Flex Open Positions) + Historical view (from trade CSV)
 - **Liquidity Monitor** — CNN Fear & Greed + VIX + credit spread proxies
 - **Daily Market Brief** — Yahoo Finance headlines + earnings calendar + key events
-- **Professional Stock Analysis** — Valuation multiples, analyst consensus, institutional ownership, earnings momentum, and enhanced technicals
+- **Professional Stock Analysis** — Analyze any ticker: valuation multiples, analyst consensus, institutional ownership, earnings momentum, enhanced technicals, and 6-month price chart
 - **Full Trade History** — Filterable transaction log
 - **Dark Professional UI** — Bloomberg-inspired dark theme throughout
 
@@ -200,6 +200,32 @@ On first run, the app fetches all trade history from `IBKR_TRADE_HISTORY_START_D
 
 ---
 
+## Stock Analysis Tab
+
+The **Stock Analysis** tab lets you analyze any publicly traded stock — not limited to your portfolio holdings.
+
+**How to use:**
+- Type any ticker directly in the input box (e.g. `NVDA`, `SPY`, `TSLA`)
+- Or quick-pick from your portfolio symbols via the dropdown
+- Click **Analyze** to fetch and display the full panel
+
+**What's displayed:**
+
+| Section | Data |
+|---------|------|
+| **Valuation Multiples** | Fwd P/E, EV/EBITDA, P/S, P/FCF, PEG, P/B |
+| **Key Fundamentals** | Gross/Op/Net margin, ROE, Revenue growth YoY, Debt/Equity |
+| **Analyst Consensus** | Overall rating badge, mean/high/low price targets, upside %, Buy/Hold/Sell distribution bar |
+| **Technical Indicators** | RSI(14) with zone label, MACD direction, Bollinger Band position, 52-week range %, relative volume, price vs MA 20/50/200 |
+| **Earnings Momentum** | Last 4 quarters EPS actual vs estimate + surprise %, next earnings date, EPS trend |
+| **Institutional Ownership** | Top 8 institutional holders + % out |
+| **Insider Activity** | Net insider direction over last 90 days (Net Buying / Selling / Mixed) |
+| **Price Chart** | 6-month candlestick with MA20 / MA50 overlays |
+
+All data is sourced from yfinance at analysis time — no extra API keys required.
+
+---
+
 ## Known Data Limitations
 
 ### 1. Historical Fetch Window
@@ -244,7 +270,7 @@ If a symbol appears in trade history but not in the live Open Positions snapshot
 
 ## Disclaimer
 
-This tool is for **personal informational purposes only**. It is not investment, tax, or financial advice. DCF valuations are simplified models — always verify numbers with your broker statements and consult professionals before making decisions.
+This tool is for **personal informational purposes only**. It is not investment, tax, or financial advice. All analysis data (valuation multiples, analyst targets, technicals) is sourced from public data via yfinance — always verify numbers with your broker statements and consult professionals before making decisions.
 
 ---
 
@@ -292,7 +318,7 @@ MIT License
 - **双视图切换** — 当前持仓（来自 Flex 实时快照）+ 历史记录（来自本地 CSV）
 - **流动性监控** — CNN 恐贪指数 + VIX + 信用利差代理
 - **每日市场简报** — Yahoo Finance 新闻 + 财报日历 + 重要事件
-- **专业股票分析** — 估值倍数、分析师共识、机构持仓、盈利动量、增强技术指标
+- **专业股票分析** — 可分析任意 ticker：估值倍数、分析师共识、机构持仓、盈利动量、增强技术指标及 6 个月 K 线图
 - **完整交易记录** — 可筛选的交易流水
 - **专业暗色 UI** — Bloomberg 风格全局暗色主题
 
@@ -455,6 +481,32 @@ streamlit run main.py
 
 点击左侧边栏的 **"Refresh All Data"** 按钮从 IBKR 拉取最新数据。
 
+---
+
+## 股票分析功能
+
+**Stock Analysis** 标签页可分析任意上市股票，不受持仓限制。
+
+**使用方法：**
+- 在输入框直接输入任意 ticker（如 `NVDA`、`SPY`、`TSLA`）
+- 或从下拉菜单快速选择你的持仓标的
+- 点击 **Analyze** 获取并展示完整分析面板
+
+**展示内容：**
+
+| 模块 | 数据内容 |
+|------|---------|
+| **估值倍数** | 远期市盈率、EV/EBITDA、市销率、市现率、PEG、市净率 |
+| **核心基本面** | 毛利率/营业利润率/净利率、ROE、营收同比增长、债务/权益比 |
+| **分析师共识** | 综合评级徽章、平均/最高/最低目标价、上涨空间、买入/持有/卖出分布条形图 |
+| **技术指标** | RSI(14) 及超买超卖标注、MACD 方向、布林带位置、52 周区间位置、相对成交量、价格与 MA20/50/200 偏离% |
+| **盈利动量** | 近 4 季度 EPS 实际 vs 预期 + 超预期幅度、下次财报日期、EPS 趋势 |
+| **机构持仓** | 前 8 大机构股东 + 持仓占比 |
+| **内部人士动向** | 近 90 天净买入/卖出/混合 |
+| **价格走势图** | 6 个月 K 线图叠加 MA20/MA50 |
+
+所有数据在点击分析时通过 yfinance 实时获取，无需额外 API Key。
+
 首次运行时，App 会从 `IBKR_TRADE_HISTORY_START_DATE` 到昨天，分多个 364 天的时间段拉取全量历史。后续刷新仅增量拉取最新日期之后的数据。
 
 ---
@@ -503,7 +555,7 @@ IBKR Flex 始终滞后 1 天。有效 `toDate` = `（Token 生成日期 − 1）
 
 ## 免责声明
 
-本工具仅供**个人信息参考使用**，不构成投资、税务或财务建议。DCF 估值为基于公开数据的简化模型——在做出任何决策前，请以券商官方报表为准，并咨询专业人士。
+本工具仅供**个人信息参考使用**，不构成投资、税务或财务建议。所有分析数据（估值倍数、分析师目标价、技术指标）均通过 yfinance 获取自公开来源——在做出任何决策前，请以券商官方报表为准，并咨询专业人士。
 
 ---
 
