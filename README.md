@@ -21,7 +21,7 @@ I built this tool to solve that — and more:
 - Pull **complete trade history** from IBKR via Flex Web Service
 - Calculate **true cash-flow diluted cost basis**
 - Clearly separate **Realized vs Unrealized P&L**
-- Integrate **liquidity monitoring**, market data, and DCF valuation
+- Integrate **liquidity monitoring**, market data, and professional stock analysis
 - Keep everything **100% local** for privacy and security
 
 ---
@@ -31,11 +31,11 @@ I built this tool to solve that — and more:
 - **True Diluted Cost Basis** — Net cash-flow method that properly reflects wave trading
 - **Strict P&L Separation** — Realized and Unrealized clearly distinguished
 - **Dual Portfolio Views** — Current holdings (from Flex Open Positions) + Historical view (from trade CSV)
-- **Top 10 Gainer / Loser** — Quick performance screening
-- **Liquidity Monitor** — CNN Fear & Greed + VIX + credit spread proxies + Safe Haven Demand
+- **Liquidity Monitor** — CNN Fear & Greed + VIX + credit spread proxies
 - **Daily Market Brief** — Yahoo Finance headlines + earnings calendar + key events
-- **Multi-Model DCF Valuation** — Two-stage, Conservative, Perpetual (Gordon), and Average Fair Value
+- **Professional Stock Analysis** — Valuation multiples, analyst consensus, institutional ownership, earnings momentum, and enhanced technicals
 - **Full Trade History** — Filterable transaction log
+- **Dark Professional UI** — Bloomberg-inspired dark theme throughout
 
 ---
 
@@ -48,11 +48,13 @@ I built this tool to solve that — and more:
 ├── requirements.txt
 ├── .env.example                # Template for all secrets / settings
 ├── .gitignore
+├── .streamlit/
+│   └── config.toml             # Dark theme configuration
 ├── cache/                      # Runtime cache (trade_history.csv, snapshots, etc.)
 └── src/
     ├── data/                   # ibkr_fetch.py · ibkr_account.py · flex_report.py
-    ├── core/                   # trade_processor.py · prices · DCF
-    ├── monitors/               # liquidity + daily brief
+    ├── core/                   # trade_processor.py · market_data.py · stock_analysis.py
+    ├── monitors/               # liquidity_monitor.py · daily_brief.py
     └── utils/
 ```
 
@@ -278,7 +280,7 @@ MIT License
 - 通过 Flex Web Service 拉取**完整交易历史**
 - 计算**真实现金流摊薄成本**
 - 清晰区分**已实现与未实现盈亏**
-- 集成**流动性监控**、市场数据与 DCF 估值
+- 集成**流动性监控**、市场数据与专业股票分析
 - 全部**本地运行**，保护隐私与安全
 
 ---
@@ -288,11 +290,11 @@ MIT License
 - **真实摊薄成本** — 净现金流法，正确反映波段交易收益
 - **盈亏严格分离** — 已实现与未实现盈亏清晰展示
 - **双视图切换** — 当前持仓（来自 Flex 实时快照）+ 历史记录（来自本地 CSV）
-- **涨跌幅 Top 10** — 快速筛选强弱标的
-- **流动性监控** — CNN 恐贪指数 + VIX + 信用利差代理 + 避险需求
+- **流动性监控** — CNN 恐贪指数 + VIX + 信用利差代理
 - **每日市场简报** — Yahoo Finance 新闻 + 财报日历 + 重要事件
-- **多模型 DCF 估值** — 两阶段、保守两阶段、永续增长（Gordon）及平均公允价值
+- **专业股票分析** — 估值倍数、分析师共识、机构持仓、盈利动量、增强技术指标
 - **完整交易记录** — 可筛选的交易流水
+- **专业暗色 UI** — Bloomberg 风格全局暗色主题
 
 ---
 
@@ -305,11 +307,13 @@ MIT License
 ├── requirements.txt
 ├── .env.example                # 所有密钥和配置的模板
 ├── .gitignore
+├── .streamlit/
+│   └── config.toml             # 暗色主题配置
 ├── cache/                      # 运行时缓存（trade_history.csv、快照等）
 └── src/
     ├── data/                   # ibkr_fetch.py · ibkr_account.py · flex_report.py
-    ├── core/                   # trade_processor.py · 价格 · DCF
-    ├── monitors/               # 流动性监控 + 每日简报
+    ├── core/                   # trade_processor.py · market_data.py · stock_analysis.py
+    ├── monitors/               # liquidity_monitor.py · daily_brief.py
     └── utils/
 ```
 

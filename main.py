@@ -3,11 +3,11 @@ import numpy as np
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 from datetime import datetime
 import sys
 from pathlib import Path
 
-# Add src to Python path
 src_path = Path(__file__).parent / "src"
 sys.path.append(str(src_path))
 
@@ -21,18 +21,118 @@ from data.ibkr_account import (
 )
 from core.trade_processor import process_trades
 from core.market_data import get_prices_for_portfolio
+from core.stock_analysis import get_stock_analysis
 from monitors.liquidity_monitor import get_fear_greed_data, get_liquidity_indicators
 from monitors.daily_brief import get_daily_brief
-from core.dcf_valuation import calculate_all_dcf
 
+# ====================== Page Config ======================
+st.set_page_config(page_title="IBKR Decision Hub", page_icon="◈", layout="wide")
 
+# ====================== Global CSS ======================
+st.markdown("""
+<style>
+/* ── Base ── */
+html, body, [data-testid="stAppViewContainer"] {
+    background-color: #0a0e1a;
+}
+[data-testid="stSidebar"] {
+    background-color: #0f1525;
+    border-right: 1px solid #1e2a42;
+}
+[data-testid="stSidebar"] * { color: #c8d4e8 !important; }
+
+/* ── Metric cards ── */
+[data-testid="stMetric"] {
+    background: #141a2e;
+    border: 1px solid #1e2a42;
+    border-radius: 8px;
+    padding: 14px 18px 10px 18px;
+}
+[data-testid="stMetricLabel"] { color: #7a8fb5 !important; font-size: 0.78rem !important; letter-spacing: 0.04em; }
+[data-testid="stMetricValue"] { color: #e8ecf0 !important; font-size: 1.5rem !important; font-weight: 700; }
+[data-testid="stMetricDelta"] svg { display: none; }
+
+/* ── Tabs ── */
+[data-testid="stTabs"] button {
+    font-size: 0.85rem !important;
+    font-weight: 600 !important;
+    color: #7a8fb5 !important;
+    border-bottom: 2px solid transparent !important;
+    padding: 8px 18px !important;
+}
+[data-testid="stTabs"] button[aria-selected="true"] {
+    color: #00c8a0 !important;
+    border-bottom: 2px solid #00c8a0 !important;
+}
+
+/* ── Buttons ── */
+[data-testid="stButton"] button[kind="primary"] {
+    background: linear-gradient(135deg, #00c8a0, #00a882) !important;
+    color: #0a0e1a !important;
+    font-weight: 700 !important;
+    border: none !important;
+    border-radius: 6px !important;
+}
+[data-testid="stButton"] button[kind="primary"]:hover {
+    background: linear-gradient(135deg, #00dbb0, #00c8a0) !important;
+}
+
+/* ── Divider ── */
+hr { border-color: #1e2a42 !important; }
+
+/* ── Dataframe ── */
+[data-testid="stDataFrame"] { border: 1px solid #1e2a42 !important; border-radius: 8px; overflow: hidden; }
+
+/* ── Section headers ── */
+.section-header {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: #7a8fb5;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #1e2a42;
+}
+
+/* ── Stat chips ── */
+.stat-chip {
+    display: inline-block;
+    background: #141a2e;
+    border: 1px solid #1e2a42;
+    border-radius: 20px;
+    padding: 3px 12px;
+    font-size: 0.78rem;
+    color: #c8d4e8;
+    margin: 3px 3px 3px 0;
+}
+.chip-green { border-color: #00c8a0; color: #00c8a0 !important; }
+.chip-red   { border-color: #ff4d6d; color: #ff4d6d !important; }
+.chip-gold  { border-color: #f4c542; color: #f4c542 !important; }
+
+/* ── Rating badge ── */
+.rating-badge {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+.rating-strong-buy { background: #003d2e; color: #00c8a0; border: 1px solid #00c8a0; }
+.rating-buy        { background: #002a20; color: #00e8b0; border: 1px solid #00e8b0; }
+.rating-hold       { background: #2a2500; color: #f4c542; border: 1px solid #f4c542; }
+.rating-sell       { background: #3d0015; color: #ff4d6d; border: 1px solid #ff4d6d; }
+.rating-na         { background: #1a1f30; color: #7a8fb5; border: 1px solid #2a3350; }
+
+/* ── App title ── */
+h1 { color: #e8ecf0 !important; font-size: 1.4rem !important; font-weight: 700 !important; letter-spacing: -0.01em; }
+h2, h3 { color: #c8d4e8 !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# ====================== Helpers ======================
 def _holding_pnl_and_pct(price: float, info: dict) -> tuple[float, float]:
-    """
-    Return (pnl_usd, pnl_pct) for a symbol.
-
-    Open  – unrealized: (current_price − diluted_avg_cost) × shares
-    Closed – realized_pnl already computed by process_trades (total_sell_proceeds − total_buy_cost)
-    """
     sh = float(info.get("current_shares", 0) or 0)
     ac = float(info.get("avg_cost", 0) or 0)
     if abs(sh) > 1e-9:
@@ -46,7 +146,6 @@ def _holding_pnl_and_pct(price: float, info: dict) -> tuple[float, float]:
 
 
 def _trade_history_display(trades_df: pd.DataFrame) -> pd.DataFrame:
-    """Only date, symbol, and signed trade cash (prefer IBKR proceeds)."""
     if trades_df is None or trades_df.empty:
         return pd.DataFrame(columns=["Date", "Symbol", "Amount"])
     t = trades_df.copy()
@@ -67,79 +166,51 @@ def _trade_history_display(trades_df: pd.DataFrame) -> pd.DataFrame:
     is_buy = t["action"].map(_row_is_buy)
     fallback = np.where(is_buy, -np.abs(pq.fillna(0)), np.abs(pq.fillna(0)))
     amt = amt.where(amt.notna(), fallback)
-    out = pd.DataFrame(
-        {
-            "Date": t["date"].dt.strftime("%Y-%m-%d"),
-            "Symbol": t["symbol"].astype(str),
-            "Amount": np.round(pd.to_numeric(amt, errors="coerce"), 2),
-        }
-    )
+    out = pd.DataFrame({
+        "Date": t["date"].dt.strftime("%Y-%m-%d"),
+        "Symbol": t["symbol"].astype(str),
+        "Amount": np.round(pd.to_numeric(amt, errors="coerce"), 2),
+    })
     return out.sort_values("Date", ascending=False, na_position="last").reset_index(drop=True)
 
 
-def get_single_stock_indicators(symbol: str):
-    """Calculate technical and funding flow indicators for a single stock"""
+def _color_pnl(val):
+    if isinstance(val, (int, float)) and not isinstance(val, bool) and pd.notna(val):
+        if val > 0:
+            return "background-color: #003d2e; color: #00c8a0"
+        if val < 0:
+            return "background-color: #3d0015; color: #ff4d6d"
+    return ""
+
+
+def _fmt(x, fmt: str, suffix: str = "") -> str:
+    if isinstance(x, (int, float)) and not isinstance(x, bool) and pd.notna(x) and not math.isnan(x):
+        return format(x, fmt) + suffix
+    return "—"
+
+
+def _val_color(v) -> str:
+    """Return inline color style for a valuation/fundamental value."""
     try:
-        import yfinance as yf
-        ticker = yf.Ticker(symbol)
-        hist = ticker.history(period="60d")
-        if hist is None or hist.empty or len(hist) < 15:
-            raise ValueError("insufficient history")
-
-        delta = hist["Close"].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-        rs = gain / loss.replace(0, np.nan)
-        rsi_series = 100 - (100 / (1 + rs))
-        rsi_raw = rsi_series.iloc[-1]
-        rsi = float(rsi_raw) if pd.notna(rsi_raw) and math.isfinite(float(rsi_raw)) else 50.0
-
-        avg_vol = hist["Volume"].rolling(20).mean().iloc[-1]
-        today_vol = hist["Volume"].iloc[-1]
-        av = float(avg_vol) if pd.notna(avg_vol) else 0.0
-        tv = float(today_vol) if pd.notna(today_vol) else 0.0
-        rel_vol = tv / av if av > 0 else 0.0
-
-        pc_ratio = 0.85
-        try:
-            opts = getattr(ticker, "options", None)
-            if opts:
-                opt = ticker.option_chain(opts[0])
-                put_oi = opt.puts["openInterest"].sum()
-                call_oi = opt.calls["openInterest"].sum()
-                pc_ratio = put_oi / call_oi if call_oi > 0 else 1.0
-        except Exception:
-            pass
-
-        return {
-            "RSI": round(rsi, 1),
-            "Relative_Volume": round(rel_vol, 2),
-            "Put_Call_Ratio": round(pc_ratio, 2),
-            "Signal": "Bullish"
-            if rsi < 40 and rel_vol > 1.2
-            else "Bearish"
-            if rsi > 70
-            else "Neutral",
-        }
+        f = float(v)
+        if f > 0:
+            return "color:#00c8a0"
+        return "color:#ff4d6d"
     except Exception:
-        return {
-            "RSI": 50.0,
-            "Relative_Volume": 1.0,
-            "Put_Call_Ratio": 0.85,
-            "Signal": "Neutral",
-        }
+        return "color:#7a8fb5"
 
 
-# ====================== Page Configuration ======================
-st.set_page_config(page_title="IBKR Decision Hub", page_icon="🧭", layout="wide")
-st.title("🧭 IBKR Local Investment Decision Hub")
-st.divider()
+# ====================== Page Header ======================
+col_title, col_date = st.columns([6, 1])
+with col_title:
+    st.markdown("# ◈ IBKR Decision Hub")
+with col_date:
+    st.markdown(f"<div style='text-align:right;color:#7a8fb5;font-size:0.78rem;padding-top:12px'>{datetime.now().strftime('%a %b %d, %Y')}</div>", unsafe_allow_html=True)
 
 # ====================== Sidebar ======================
 with st.sidebar:
-    st.header("⚙️ Control Panel")
+    st.markdown("<div style='font-size:0.7rem;letter-spacing:0.1em;color:#7a8fb5;text-transform:uppercase;font-weight:700;padding-bottom:8px'>Control Panel</div>", unsafe_allow_html=True)
 
-    st.subheader("📅 Trade History Range")
     from datetime import date as _date
     _sidebar_start = st.session_state.get("_sidebar_start_date", _date(2024, 1, 1))
     _picked_start = st.date_input(
@@ -147,16 +218,12 @@ with st.sidebar:
         value=_sidebar_start,
         min_value=_date(2015, 1, 1),
         max_value=datetime.now().date(),
-        help=(
-            "When you click Refresh, trade history is fully re-fetched starting from "
-            "this date. Does not affect incremental auto-sync on normal app loads."
-        ),
+        help="Full re-fetch from this date when Refresh is clicked.",
         key="sidebar_date_picker",
     )
 
-    if st.button("🔄 Refresh All Data from IBKR", type="primary", use_container_width=True):
+    if st.button("↺  Refresh All Data", type="primary", use_container_width=True):
         _start_str = _picked_start.strftime("%Y%m%d")
-        # Persist the chosen date and the override before clearing other state
         st.session_state["_ibkr_flex_full_refresh"] = True
         st.session_state["_trade_start_date_override"] = _start_str
         st.session_state["_sidebar_start_date"] = _picked_start
@@ -166,11 +233,14 @@ with st.sidebar:
                 del st.session_state[key]
         st.rerun()
 
-    st.divider()
-    st.subheader("📊 Display Settings")
-    view_mode = st.radio("Portfolio View",
-                         ["Current Holdings", "All Historical Holdings (by Performance)"],
-                         horizontal=True, index=0)
+    st.markdown("<hr style='margin:12px 0'>", unsafe_allow_html=True)
+    st.markdown("<div style='font-size:0.7rem;letter-spacing:0.1em;color:#7a8fb5;text-transform:uppercase;font-weight:700;padding-bottom:8px'>Display</div>", unsafe_allow_html=True)
+    view_mode = st.radio(
+        "Portfolio View",
+        ["Current Holdings", "All Historical Holdings"],
+        horizontal=False,
+        index=0,
+    )
 
 # ====================== Load Data ======================
 _flex_full_refresh = st.session_state.pop("_ibkr_flex_full_refresh", False)
@@ -189,9 +259,6 @@ account = st.session_state.account_data
 cash_balance = account["cash_balance"]
 
 # ====================== Stale Data Warning ======================
-# IBKR Flex fd/td parameters can only NARROW a query's date range, not extend it.
-# If the template's "To Date" is in the past, the API will silently cap all
-# responses at that date no matter what td we send.  Surface this clearly.
 _trade_max_date = pd.to_datetime(
     trades["date"] if (trades is not None and not trades.empty and "date" in trades.columns) else [],
     errors="coerce",
@@ -202,56 +269,30 @@ if pd.notna(_trade_max_date):
     if _stale_days > 30:
         st.error(
             f"**Trade history is {_stale_days} days out of date** "
-            f"(latest trade in cache: **{pd.Timestamp(_trade_max_date).date()}**).  \n\n"
-            "**Root cause**: your IBKR Flex Trade query has a fixed 'To Date' in the past. "
-            "IBKR's API parameters (`fd`/`td`) can only *narrow* a query's date range — "
-            "they cannot extend beyond the template's configured end date.  \n\n"
-            "**How to fix (takes ~2 minutes):**  \n"
-            "1. Log in to IBKR Client Portal → **Reports** → **Flex Queries**  \n"
-            "2. Click **Edit** on your **Trades** Flex query  \n"
-            "3. Under **Reporting Period**, change the period to **'Last 3 Years'** "
-            "(or set a custom date range with 'To Date' = **20991231**)  \n"
-            "4. Save the query  \n"
-            "5. Come back here and click **Refresh All Data from IBKR** in the sidebar"
+            f"(latest: **{pd.Timestamp(_trade_max_date).date()}**).  \n"
+            "Fix: Client Portal → Flex Queries → edit your Trades query → set Period to **Last 3 Years** → Save → Refresh here."
         )
 
 # ====================== Tabs ======================
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📊 Portfolio Analysis", 
-    "🌊 Liquidity Monitor", 
-    "📅 Daily Market Brief", 
-    "📜 Trade History",
-    "📈 DCF + Stock Analysis"
+    "Portfolio",
+    "Liquidity",
+    "Market Brief",
+    "Trade History",
+    "Stock Analysis",
 ])
 
-def _color_pnl(val):
-    """Green / red cell background for P&L columns."""
-    if isinstance(val, (int, float)) and not isinstance(val, bool) and pd.notna(val):
-        if val > 0:
-            return "background-color: #90EE90; color: black"
-        if val < 0:
-            return "background-color: #FF9999; color: black"
-    return ""
-
-
-def _fmt(x, fmt: str, suffix: str = "") -> str:
-    if isinstance(x, (int, float)) and not isinstance(x, bool) and pd.notna(x) and not math.isnan(x):
-        return format(x, fmt) + suffix
-    return "—"
-
-
+# ─────────────────────────────────────────────────────
+# TAB 1 — Portfolio Analysis
+# ─────────────────────────────────────────────────────
 with tab1:
-    st.subheader("Portfolio Analysis")
-
     if view_mode == "Current Holdings":
-        # --- Current Holdings: one row per symbol from Flex Open Positions ---
         wmsg = account.get("positions_flex_warning")
         if wmsg:
             st.warning(wmsg)
         pflex = account.get("positions_flex_df")
         if pflex is not None and not pflex.empty:
             disp = enrich_positions_with_trade_cost(pflex, portfolio)
-            # Sort by Market Value descending (largest positions first)
             if "Market Value" in disp.columns:
                 disp = disp.assign(
                     _mv=pd.to_numeric(disp["Market Value"], errors="coerce")
@@ -283,19 +324,15 @@ with tab1:
 
         pv = float(account.get("positions_market_value_total") or 0)
         nb = pv + float(cash_balance)
+        st.markdown("<br>", unsafe_allow_html=True)
         m1, m2, m3 = st.columns(3)
-        m1.metric("Positions (Flex)", f"${pv:,.0f}")
-        m2.metric("Cash", f"${cash_balance:,.2f}")
-        m3.metric("Net", f"${nb:,.0f}")
+        m1.metric("Positions (Market Value)", f"${pv:,.0f}")
+        m2.metric("Cash Balance", f"${cash_balance:,.2f}")
+        m3.metric("Net Portfolio Value", f"${nb:,.0f}")
 
     else:
-        # --- Historical Holdings ---
-        # Open positions: same enriched Flex table as Current Holdings (ground truth from IBKR).
-        # Closed positions: symbols in trade history where current_shares ≈ 0.
         pflex_hist = account.get("positions_flex_df")
-
-        # ---- Open positions section ----
-        st.markdown("### Open Positions")
+        st.markdown("<div class='section-header'>Open Positions</div>", unsafe_allow_html=True)
         if pflex_hist is not None and not pflex_hist.empty:
             open_disp = enrich_positions_with_trade_cost(pflex_hist, portfolio)
             if "Market Value" in open_disp.columns:
@@ -329,7 +366,11 @@ with tab1:
 
             pv_h = float(account.get("positions_market_value_total") or 0)
             nb_h = pv_h + float(cash_balance)
-            st.markdown(f"**Net** — Positions: ${pv_h:,.0f} | Cash: ${cash_balance:,.0f} | Total: ${nb_h:,.0f}")
+            st.markdown("<br>", unsafe_allow_html=True)
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Positions", f"${pv_h:,.0f}")
+            c2.metric("Cash", f"${cash_balance:,.0f}")
+            c3.metric("Total", f"${nb_h:,.0f}")
         else:
             wmsg_h = account.get("positions_flex_warning")
             if wmsg_h:
@@ -337,11 +378,6 @@ with tab1:
             else:
                 st.info("No open positions data available. Refresh from IBKR.")
 
-        # ---- Closed positions section ----
-        # Only show symbols where the trade ledger reaches exactly zero shares.
-        # Symbols with a non-zero ledger balance that are absent from the live snapshot
-        # have incomplete trade history (initial buys or recent sells outside the fetch
-        # window) and are silently excluded — see README § "Known Data Limitations".
         flex_syms = set()
         if pflex_hist is not None and not pflex_hist.empty:
             _s = next((c for c in pflex_hist.columns if c.strip().lower() == "symbol"), None)
@@ -356,63 +392,106 @@ with tab1:
                 close_date = info.get("last_sell_date") or ""
                 closed_rows.append({
                     "Symbol": sym,
-                    "Realized PnL ($)": round(realized, 2),
+                    "Realized P&L ($)": round(realized, 2),
                     "Close Date": close_date,
                 })
 
         if closed_rows:
-            st.markdown("### Closed Positions")
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("<div class='section-header'>Closed Positions</div>", unsafe_allow_html=True)
             closed_df = (
                 pd.DataFrame(closed_rows)
-                .sort_values("Realized PnL ($)", ascending=False)
+                .sort_values("Realized P&L ($)", ascending=False)
                 .reset_index(drop=True)
             )
             closed_sty = (
                 closed_df.style
-                .format({"Realized PnL ($)": lambda x: _fmt(x, ",.2f")}, na_rep="—")
-                .applymap(_color_pnl, subset=["Realized PnL ($)"])
+                .format({"Realized P&L ($)": lambda x: _fmt(x, ",.2f")}, na_rep="—")
+                .applymap(_color_pnl, subset=["Realized P&L ($)"])
             )
             st.dataframe(closed_sty, use_container_width=True, hide_index=True)
 
+# ─────────────────────────────────────────────────────
+# TAB 2 — Liquidity Monitor
+# ─────────────────────────────────────────────────────
 with tab2:
-    st.subheader("🌊 US Equity Liquidity Monitor")
+    st.markdown("<div class='section-header'>US Equity Liquidity Monitor</div>", unsafe_allow_html=True)
     indicators = get_liquidity_indicators()
     fg_df = get_fear_greed_data()
-    col1, col2, col3, col4 = st.columns(4)
+
+    col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
         st.metric("Fed Net Liquidity", f"${indicators['Fed_Net_Liquidity_B']}B", delta=indicators['Net_Liquidity_Trend'])
     with col2:
         st.metric("Chicago Fed NFCI", f"{indicators['NFCI']}", delta=indicators['NFCI_Interp'])
     with col3:
-        st.metric("10Y-2Y Yield Spread", f"{indicators['10Y_2Y_Spread']}%")
+        st.metric("10Y–2Y Spread", f"{indicators['10Y_2Y_Spread']}%")
     with col4:
         st.metric("VIX", f"{indicators['VIX']}")
+    with col5:
+        if not fg_df.empty:
+            st.metric("Fear & Greed", f"{fg_df['value'].iloc[-1]:.0f} / 100")
+
+    st.markdown("<br>", unsafe_allow_html=True)
     if not fg_df.empty:
-        current_fg = fg_df["value"].iloc[-1]
-        st.metric("CNN Fear & Greed Index", f"{current_fg:.0f}/100")
-        fig = px.line(fg_df.tail(30), x="timestamp", y="value", title="Fear & Greed Trend (Last 30 Days)")
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=fg_df["timestamp"].tail(30),
+            y=fg_df["value"].tail(30),
+            mode="lines+markers",
+            line=dict(color="#00c8a0", width=2),
+            marker=dict(size=4, color="#00c8a0"),
+            fill="tozeroy",
+            fillcolor="rgba(0,200,160,0.08)",
+            name="Fear & Greed",
+        ))
+        fig.add_hline(y=25, line_dash="dot", line_color="#ff4d6d", annotation_text="Extreme Fear", annotation_font_color="#ff4d6d")
+        fig.add_hline(y=75, line_dash="dot", line_color="#f4c542", annotation_text="Extreme Greed", annotation_font_color="#f4c542")
+        fig.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="#0a0e1a",
+            plot_bgcolor="#0f1525",
+            title=dict(text="CNN Fear & Greed — Last 30 Days", font=dict(color="#c8d4e8", size=13)),
+            xaxis=dict(gridcolor="#1e2a42", color="#7a8fb5"),
+            yaxis=dict(gridcolor="#1e2a42", color="#7a8fb5", range=[0, 100]),
+            margin=dict(l=10, r=10, t=40, b=10),
+            height=260,
+        )
         st.plotly_chart(fig, use_container_width=True)
-    st.subheader("Credit & Stress Indicators")
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<div class='section-header'>Credit & Stress</div>", unsafe_allow_html=True)
     c1, c2 = st.columns(2)
-    with c1:
-        st.metric("High Yield OAS", f"{indicators['HY_OAS']}%")
-    with c2:
-        st.metric("Overall Assessment", indicators["Overall_Assessment"])
+    c1.metric("High Yield OAS", f"{indicators['HY_OAS']}%")
+    c2.metric("Overall Assessment", indicators["Overall_Assessment"])
 
+# ─────────────────────────────────────────────────────
+# TAB 3 — Daily Market Brief
+# ─────────────────────────────────────────────────────
 with tab3:
-    st.subheader(f"📅 {datetime.now().strftime('%Y-%m-%d')} Daily Market Brief")
+    st.markdown(f"<div class='section-header'>{datetime.now().strftime('%B %d, %Y')} — Market Brief</div>", unsafe_allow_html=True)
     brief = get_daily_brief()
-    st.write("### Top Headlines")
+    st.markdown("<div class='section-header' style='margin-top:8px'>Top Headlines</div>", unsafe_allow_html=True)
     for item in brief["news"]:
-        st.markdown(f"**[{item['title']}]({item['link']})** — {item['published']}")
-    st.write("### Earnings Calendar")
-    st.dataframe(brief["earnings"])
+        st.markdown(
+            f"<div style='padding:8px 0;border-bottom:1px solid #1e2a42'>"
+            f"<a href='{item['link']}' target='_blank' style='color:#00c8a0;font-weight:600;text-decoration:none'>{item['title']}</a>"
+            f"<span style='color:#7a8fb5;font-size:0.75rem;margin-left:8px'>{item['published']}</span>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<div class='section-header'>Earnings Calendar</div>", unsafe_allow_html=True)
+    st.dataframe(brief["earnings"], use_container_width=True, hide_index=True)
 
+# ─────────────────────────────────────────────────────
+# TAB 4 — Trade History
+# ─────────────────────────────────────────────────────
 with tab4:
-    st.subheader("📜 Full Trade History")
+    st.markdown("<div class='section-header'>Trade History</div>", unsafe_allow_html=True)
     th_display = _trade_history_display(trades)
     sym_opts = ["All"] + sorted(th_display["Symbol"].dropna().unique().tolist())
-    symbol_filter = st.selectbox("Filter by Symbol", sym_opts)
+    symbol_filter = st.selectbox("Filter by Symbol", sym_opts, label_visibility="collapsed")
     if symbol_filter == "All":
         st.dataframe(th_display, use_container_width=True, hide_index=True)
     else:
@@ -422,70 +501,331 @@ with tab4:
             hide_index=True,
         )
 
+# ─────────────────────────────────────────────────────
+# TAB 5 — Stock Analysis
+# ─────────────────────────────────────────────────────
 with tab5:
-    st.subheader("📈 DCF Valuation + Stock Analysis")
-    if portfolio:
-        selected_symbol = st.selectbox("Select Symbol", options=list(portfolio.keys()))
-        col_assume, col_result = st.columns([1, 2])
-        with col_assume:
-            st.write("**DCF Valuation Assumptions**")
-            high_growth = st.slider("High Growth Rate (%)", 0, 30, 12) / 100.0
-            high_years = st.slider("High Growth Period (years)", 3, 10, 5)
-            terminal_g = st.slider("Terminal Growth Rate (%)", 0, 6, 3) / 100.0
-            wacc = st.slider("WACC (%)", 6, 15, 10) / 100.0
-            assumptions = {
-                'high_growth': high_growth, 'high_years': high_years,
-                'terminal_growth': terminal_g, 'wacc': wacc,
-            }
-            st.caption(
-                "FCF = Operating Cash Flow − CapEx (avg of up to 3 years). "
-                "Net debt subtracted to convert Enterprise Value → Equity Value."
-            )
-        with col_result:
-            if st.button("🚀 Run Multi-Model DCF", type="primary", use_container_width=True):
-                with st.spinner(f"Calculating for {selected_symbol}..."):
-                    dcf_results = calculate_all_dcf(selected_symbol, assumptions)
-                    if "error" in dcf_results:
-                        st.error(dcf_results["error"])
-                    else:
-                        fv = dcf_results["Average Fair Value"]
-                        cp = dcf_results["Current Price"]
-                        upside = dcf_results.get("Upside (%)", 0.0)
-                        m1, m2, m3, m4 = st.columns(4)
-                        m1.metric("Two Stage DCF", f"${dcf_results['Two Stage DCF']:,.2f}")
-                        m2.metric("Conservative", f"${dcf_results['Conservative Two Stage']:,.2f}")
-                        m3.metric("Perpetual (Gordon)", f"${dcf_results['Perpetual (Gordon)']:,.2f}")
-                        m4.metric(
-                            "Avg Fair Value",
-                            f"${fv:,.2f}",
-                            delta=f"{upside:+.1f}% vs current ${cp}",
-                            delta_color="normal",
-                        )
-                        if selected_symbol in portfolio:
-                            diluted = float(portfolio[selected_symbol].get("avg_cost", 0) or 0)
-                            if diluted > 0:
-                                mos = fv - diluted
-                                mos_pct = mos / diluted * 100
-                                st.info(
-                                    f"**Your Diluted Cost**: ${diluted:.2f}  |  "
-                                    f"**DCF Margin of Safety**: ${mos:+.2f} ({mos_pct:+.1f}%)"
-                                )
-                        # Summary table (exclude verbose keys for cleanliness)
-                        display_keys = [
-                            "Two Stage DCF", "Conservative Two Stage", "Perpetual (Gordon)",
-                            "Average Fair Value", "Current Price", "Upside (%)",
-                            "Latest FCF", "Net Debt ($)", "Shares Outstanding",
-                        ]
-                        tbl = {k: dcf_results[k] for k in display_keys if k in dcf_results}
-                        st.dataframe(pd.DataFrame([tbl]), use_container_width=True, hide_index=True)
-        st.divider()
-        st.subheader(f"🔍 {selected_symbol} Technical & Funding Flow Analysis")
-        indicators = get_single_stock_indicators(selected_symbol)
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("RSI (14)", f"{indicators['RSI']}")
-        c2.metric("Relative Volume", f"{indicators['Relative_Volume']}x")
-        c3.metric("Put/Call Ratio (OI)", f"{indicators['Put_Call_Ratio']}")
-        c4.metric("Money Flow Signal", indicators["Signal"])
+    if not portfolio:
+        st.info("No portfolio data — load trades from IBKR first.")
     else:
-        st.info("No portfolio symbols yet — load trades from IBKR so symbols appear here.")
+        # Symbol selector
+        sym_col, btn_col = st.columns([3, 1])
+        with sym_col:
+            selected_symbol = st.selectbox(
+                "Symbol",
+                options=sorted(portfolio.keys()),
+                label_visibility="collapsed",
+            )
+        with btn_col:
+            run_analysis = st.button("Analyze", type="primary", use_container_width=True)
 
+        if run_analysis or ("_sa_cache" in st.session_state and st.session_state.get("_sa_sym") == selected_symbol):
+            if run_analysis or "_sa_cache" not in st.session_state:
+                with st.spinner(f"Fetching data for {selected_symbol}..."):
+                    analysis = get_stock_analysis(selected_symbol)
+                    st.session_state["_sa_cache"] = analysis
+                    st.session_state["_sa_sym"] = selected_symbol
+            else:
+                analysis = st.session_state["_sa_cache"]
+
+            if analysis.get("error"):
+                st.error(analysis["error"])
+            else:
+                info_row = analysis
+                val = analysis["valuation"]
+                fund = analysis["fundamentals"]
+                tech = analysis["technicals"]
+                analyst = analysis["analyst"]
+                inst = analysis["institutional"]
+                earn = analysis["earnings"]
+
+                # ── Header row ──
+                mc = info_row.get("market_cap")
+                mc_str = f"${mc/1e9:.1f}B" if mc and mc >= 1e9 else (f"${mc/1e6:.0f}M" if mc else "—")
+                st.markdown(
+                    f"<div style='margin-bottom:16px'>"
+                    f"<span style='font-size:1.3rem;font-weight:700;color:#e8ecf0'>{selected_symbol}</span>"
+                    f"<span style='color:#7a8fb5;margin-left:10px;font-size:0.9rem'>{info_row.get('name','')}</span>"
+                    f"<span class='stat-chip' style='margin-left:12px'>{info_row.get('sector','—')}</span>"
+                    f"<span class='stat-chip'>{info_row.get('industry','—')}</span>"
+                    f"<span class='stat-chip'>Mkt Cap {mc_str}</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+                # ── Row 1: Valuation + Fundamentals metrics ──
+                st.markdown("<div class='section-header'>Valuation Multiples & Key Fundamentals</div>", unsafe_allow_html=True)
+                cols = st.columns(6)
+                metrics_row1 = [
+                    ("Fwd P/E",    val.get("Forward P/E")),
+                    ("EV/EBITDA",  val.get("EV/EBITDA")),
+                    ("P/S",        val.get("P/S")),
+                    ("P/FCF",      val.get("P/FCF")),
+                    ("PEG",        val.get("PEG")),
+                    ("P/B",        val.get("P/B")),
+                ]
+                for col, (label, v) in zip(cols, metrics_row1):
+                    disp = _fmt(v, ".1f") if v is not None else "—"
+                    col.metric(label, disp)
+
+                cols2 = st.columns(6)
+                metrics_row2 = [
+                    ("Gross Margin",   fund.get("Gross Margin"),    "%"),
+                    ("Op Margin",      fund.get("Operating Margin"), "%"),
+                    ("Net Margin",     fund.get("Net Margin"),       "%"),
+                    ("ROE",            fund.get("ROE"),              "%"),
+                    ("Rev Growth YoY", fund.get("Revenue Growth YoY"), "%"),
+                    ("Debt/Equity",    fund.get("Debt/Equity"),     "x"),
+                ]
+                for col, (label, v, sfx) in zip(cols2, metrics_row2):
+                    disp = (f"{v:+.1f}{sfx}" if sfx == "%" else f"{v:.2f}{sfx}") if v is not None else "—"
+                    delta_c = "normal" if v is None else ("normal" if (sfx == "x" or v >= 0) else "inverse")
+                    col.metric(label, disp)
+
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # ── Row 2: 3-column layout ──
+                col_analyst, col_tech, col_earn = st.columns([1, 1, 1])
+
+                # ── Analyst Consensus ──
+                with col_analyst:
+                    st.markdown("<div class='section-header'>Analyst Consensus</div>", unsafe_allow_html=True)
+                    rating = analyst.get("overall_rating", "—")
+                    rating_class = {
+                        "Strong Buy": "rating-strong-buy",
+                        "Buy": "rating-buy",
+                        "Hold": "rating-hold",
+                        "Sell": "rating-sell",
+                    }.get(rating, "rating-na")
+                    st.markdown(f"<span class='rating-badge {rating_class}'>{rating}</span>", unsafe_allow_html=True)
+                    st.markdown("<br>", unsafe_allow_html=True)
+
+                    mean_t = analyst.get("mean_target")
+                    high_t = analyst.get("high_target")
+                    low_t  = analyst.get("low_target")
+                    upside = analyst.get("upside_pct")
+                    curr   = analyst.get("current_price") or tech.get("price")
+
+                    if curr:
+                        st.metric("Current Price", f"${curr:,.2f}")
+                    if mean_t:
+                        upside_str = f"{upside:+.1f}% upside" if upside is not None else ""
+                        st.metric("Mean Target", f"${float(mean_t):,.2f}", delta=upside_str)
+                    if high_t and low_t:
+                        st.markdown(
+                            f"<div style='color:#7a8fb5;font-size:0.78rem;margin-top:4px'>"
+                            f"Range: <span style='color:#00c8a0'>${float(high_t):,.2f}</span>"
+                            f" / <span style='color:#ff4d6d'>${float(low_t):,.2f}</span></div>",
+                            unsafe_allow_html=True,
+                        )
+
+                    rc = analyst.get("rating_counts", {})
+                    if rc:
+                        st.markdown("<br>", unsafe_allow_html=True)
+                        total_rc = sum(rc.values())
+                        for label, count in sorted(rc.items(), key=lambda x: -x[1]):
+                            pct_rc = count / total_rc * 100 if total_rc > 0 else 0
+                            bar_color = "#00c8a0" if "BUY" in label.upper() else ("#ff4d6d" if "SELL" in label.upper() else "#f4c542")
+                            st.markdown(
+                                f"<div style='margin-bottom:6px'>"
+                                f"<div style='display:flex;justify-content:space-between;font-size:0.75rem;color:#c8d4e8;margin-bottom:2px'>"
+                                f"<span>{label}</span><span>{count}</span></div>"
+                                f"<div style='background:#1e2a42;border-radius:3px;height:5px'>"
+                                f"<div style='background:{bar_color};width:{pct_rc:.0f}%;height:5px;border-radius:3px'></div>"
+                                f"</div></div>",
+                                unsafe_allow_html=True,
+                            )
+
+                # ── Technicals ──
+                with col_tech:
+                    st.markdown("<div class='section-header'>Technical Indicators</div>", unsafe_allow_html=True)
+
+                    rsi = tech.get("rsi")
+                    if rsi is not None:
+                        rsi_color = "#ff4d6d" if rsi > 70 else ("#00c8a0" if rsi < 30 else "#f4c542")
+                        rsi_label = "Overbought" if rsi > 70 else ("Oversold" if rsi < 30 else "Neutral")
+                        st.markdown(
+                            f"<div style='margin-bottom:10px'>"
+                            f"<span style='color:#7a8fb5;font-size:0.75rem'>RSI (14)</span><br>"
+                            f"<span style='font-size:1.6rem;font-weight:700;color:{rsi_color}'>{rsi}</span>"
+                            f"<span style='color:{rsi_color};font-size:0.75rem;margin-left:6px'>{rsi_label}</span>"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
+
+                    macd = tech.get("macd_signal", "—")
+                    macd_color = "#00c8a0" if macd == "Bullish" else ("#ff4d6d" if macd == "Bearish" else "#7a8fb5")
+                    bb = tech.get("bb_position")
+                    rel_vol = tech.get("rel_volume")
+                    w52_pct = tech.get("week52_pct")
+
+                    chip_items = [
+                        ("MACD", macd, macd_color),
+                        ("BB Position", f"{bb:.0f}%" if bb is not None else "—", "#c8d4e8"),
+                        ("Rel Volume", f"{rel_vol:.2f}x" if rel_vol is not None else "—", "#00c8a0" if rel_vol and rel_vol > 1.5 else "#c8d4e8"),
+                        ("52W Range", f"{w52_pct:.0f}%" if w52_pct is not None else "—", "#c8d4e8"),
+                    ]
+                    for label, val_s, color in chip_items:
+                        st.markdown(
+                            f"<div style='display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #1e2a42'>"
+                            f"<span style='color:#7a8fb5;font-size:0.78rem'>{label}</span>"
+                            f"<span style='color:{color};font-size:0.78rem;font-weight:600'>{val_s}</span>"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
+
+                    # MA status
+                    price_now = tech.get("price")
+                    if price_now:
+                        st.markdown("<div style='margin-top:10px;color:#7a8fb5;font-size:0.72rem;letter-spacing:0.05em'>PRICE vs MOVING AVERAGES</div>", unsafe_allow_html=True)
+                        for label, ma_key, diff_key in [("MA 20", "ma20", "price_vs_ma20"), ("MA 50", "ma50", "price_vs_ma50"), ("MA 200", "ma200", "price_vs_ma200")]:
+                            ma_val = tech.get(ma_key)
+                            diff = tech.get(diff_key)
+                            if ma_val is not None and diff is not None:
+                                c = "#00c8a0" if diff >= 0 else "#ff4d6d"
+                                sign = "+" if diff >= 0 else ""
+                                st.markdown(
+                                    f"<div style='display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1e2a42'>"
+                                    f"<span style='color:#7a8fb5;font-size:0.75rem'>{label}  <span style='color:#4a5a78'>${ma_val:,.2f}</span></span>"
+                                    f"<span style='color:{c};font-size:0.75rem;font-weight:600'>{sign}{diff:.1f}%</span>"
+                                    f"</div>",
+                                    unsafe_allow_html=True,
+                                )
+
+                # ── Earnings Momentum ──
+                with col_earn:
+                    st.markdown("<div class='section-header'>Earnings Momentum</div>", unsafe_allow_html=True)
+
+                    next_e = earn.get("next_earnings", "—")
+                    eps_trend = earn.get("eps_trend", "—")
+                    trend_color = "#00c8a0" if eps_trend == "Improving" else ("#ff4d6d" if eps_trend == "Declining" else "#f4c542")
+
+                    st.markdown(
+                        f"<div style='margin-bottom:12px'>"
+                        f"<div style='display:flex;justify-content:space-between;margin-bottom:6px'>"
+                        f"<span style='color:#7a8fb5;font-size:0.75rem'>Next Earnings</span>"
+                        f"<span style='color:#c8d4e8;font-size:0.75rem;font-weight:600'>{next_e}</span>"
+                        f"</div>"
+                        f"<div style='display:flex;justify-content:space-between'>"
+                        f"<span style='color:#7a8fb5;font-size:0.75rem'>EPS Trend</span>"
+                        f"<span style='color:{trend_color};font-size:0.75rem;font-weight:600'>{eps_trend}</span>"
+                        f"</div></div>",
+                        unsafe_allow_html=True,
+                    )
+
+                    eps_hist = earn.get("eps_history", pd.DataFrame())
+                    if not eps_hist.empty:
+                        st.markdown("<div style='color:#7a8fb5;font-size:0.72rem;letter-spacing:0.05em;margin-bottom:6px'>EPS HISTORY (LAST 4Q)</div>", unsafe_allow_html=True)
+                        rename_map = {
+                            "quarter": "Quarter",
+                            "epsActual": "Actual",
+                            "epsEstimate": "Estimate",
+                            "surprisePercent": "Surprise %",
+                        }
+                        eps_show = eps_hist.rename(columns={k: v for k, v in rename_map.items() if k in eps_hist.columns})
+
+                        def _color_surprise(val):
+                            try:
+                                f = float(val)
+                                if f > 0:
+                                    return "background-color:#003d2e;color:#00c8a0"
+                                if f < 0:
+                                    return "background-color:#3d0015;color:#ff4d6d"
+                            except Exception:
+                                pass
+                            return ""
+
+                        fmt_eps = {}
+                        for c in eps_show.columns:
+                            if c in ("Actual", "Estimate"):
+                                fmt_eps[c] = lambda x: _fmt(x, ".2f")
+                            elif c == "Surprise %":
+                                fmt_eps[c] = lambda x: _fmt(x, ".1f", "%")
+                        sty_eps = eps_show.style.format(fmt_eps, na_rep="—")
+                        if "Surprise %" in eps_show.columns:
+                            sty_eps = sty_eps.applymap(_color_surprise, subset=["Surprise %"])
+                        st.dataframe(sty_eps, use_container_width=True, hide_index=True, height=180)
+
+                # ── Row 3: Institutional ──
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("<div class='section-header'>Institutional Ownership</div>", unsafe_allow_html=True)
+                inst_col, insider_col = st.columns([3, 1])
+
+                with inst_col:
+                    top_h = inst.get("top_holders", pd.DataFrame())
+                    if not top_h.empty:
+                        pct_col = next((c for c in top_h.columns if "%" in c or "out" in c.lower()), None)
+                        fmt_inst = {}
+                        if pct_col:
+                            fmt_inst[pct_col] = lambda x: _fmt(x, ".2f", "%")
+                        if "Value" in top_h.columns:
+                            fmt_inst["Value"] = lambda x: _fmt(x, ",.0f")
+                        st.dataframe(top_h.style.format(fmt_inst, na_rep="—"), use_container_width=True, hide_index=True)
+                    else:
+                        st.caption("No institutional data available.")
+
+                with insider_col:
+                    insider_dir = inst.get("insider_direction", "—")
+                    dir_color = "#00c8a0" if insider_dir == "Net Buying" else ("#ff4d6d" if insider_dir == "Net Selling" else "#f4c542")
+                    dir_icon = "↑" if insider_dir == "Net Buying" else ("↓" if insider_dir == "Net Selling" else "↔")
+                    st.markdown(
+                        f"<div style='background:#141a2e;border:1px solid #1e2a42;border-radius:8px;padding:16px;text-align:center'>"
+                        f"<div style='color:#7a8fb5;font-size:0.72rem;letter-spacing:0.08em;margin-bottom:8px'>INSIDER ACTIVITY</div>"
+                        f"<div style='font-size:2rem;color:{dir_color}'>{dir_icon}</div>"
+                        f"<div style='color:{dir_color};font-weight:700;font-size:0.85rem;margin-top:4px'>{insider_dir}</div>"
+                        f"<div style='color:#4a5a78;font-size:0.7rem;margin-top:4px'>Last 90 days</div>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                # ── Row 4: Price chart ──
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("<div class='section-header'>Price & Volume (6 Months)</div>", unsafe_allow_html=True)
+                try:
+                    import yfinance as yf
+                    hist_chart = yf.Ticker(selected_symbol).history(period="6mo")
+                    if hist_chart is not None and not hist_chart.empty:
+                        fig_price = go.Figure()
+                        # Candlestick
+                        fig_price.add_trace(go.Candlestick(
+                            x=hist_chart.index,
+                            open=hist_chart["Open"],
+                            high=hist_chart["High"],
+                            low=hist_chart["Low"],
+                            close=hist_chart["Close"],
+                            increasing_line_color="#00c8a0",
+                            decreasing_line_color="#ff4d6d",
+                            name="Price",
+                        ))
+                        # MA overlays
+                        for n, color, name in [(20, "#f4c542", "MA20"), (50, "#7a8fb5", "MA50")]:
+                            if len(hist_chart) >= n:
+                                fig_price.add_trace(go.Scatter(
+                                    x=hist_chart.index,
+                                    y=hist_chart["Close"].rolling(n).mean(),
+                                    line=dict(color=color, width=1.2, dash="dot"),
+                                    name=name,
+                                    opacity=0.8,
+                                ))
+                        fig_price.update_layout(
+                            template="plotly_dark",
+                            paper_bgcolor="#0a0e1a",
+                            plot_bgcolor="#0f1525",
+                            xaxis=dict(gridcolor="#1e2a42", color="#7a8fb5", rangeslider_visible=False),
+                            yaxis=dict(gridcolor="#1e2a42", color="#7a8fb5"),
+                            legend=dict(orientation="h", y=1.05, font=dict(size=10, color="#7a8fb5")),
+                            margin=dict(l=10, r=10, t=10, b=10),
+                            height=340,
+                        )
+                        st.plotly_chart(fig_price, use_container_width=True)
+                except Exception:
+                    st.caption("Price chart unavailable.")
+
+        else:
+            st.markdown(
+                "<div style='text-align:center;padding:60px 0;color:#7a8fb5'>"
+                "<div style='font-size:2rem;margin-bottom:8px'>◈</div>"
+                "<div>Select a symbol and click <strong style='color:#00c8a0'>Analyze</strong></div>"
+                "</div>",
+                unsafe_allow_html=True,
+            )
