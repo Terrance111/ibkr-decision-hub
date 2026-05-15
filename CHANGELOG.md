@@ -7,7 +7,7 @@ Format: `[version] YYYY-MM-DD — summary`
 
 ---
 
-## [1.3] 2026-05-14 — Stock Analysis: open symbol input
+## [1.3] 2026-05-15 — Stock Analysis: open symbol input
 
 **Problem:** The Stock Analysis tab only allowed selecting symbols already present in the local trade history CSV, making it impossible to analyze stocks not currently held.
 
@@ -17,7 +17,7 @@ Format: `[version] YYYY-MM-DD — summary`
 
 ---
 
-## [1.2] 2026-05-15 — README bilingual update
+## [1.2] 2026-05-14 — README bilingual update
 
 - Added a dedicated **Stock Analysis** section in both English and Chinese README, documenting all 8 analysis modules, usage instructions, and data sources
 - Removed outdated DCF references from the Disclaimer sections
@@ -71,7 +71,7 @@ Core local IBKR portfolio tracker with:
 
 ---
 
-## [1.3] 2026-05-14 — 股票分析：开放任意 Symbol 输入
+## [1.3] 2026-05-15 — 股票分析：开放任意 Symbol 输入
 
 **问题：** 股票分析标签页原仅限从本地交易历史 CSV 中的 Symbol 选择，无法分析未持有的股票。
 
@@ -81,7 +81,7 @@ Core local IBKR portfolio tracker with:
 
 ---
 
-## [1.2] 2026-05-15 — README 双语更新
+## [1.2] 2026-05-14 — README 双语更新
 
 - 在中英文 README 中新增独立的**股票分析**章节，详细说明 8 个分析模块、使用方法及数据来源
 - 删除免责声明中过时的 DCF 相关表述
