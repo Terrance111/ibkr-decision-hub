@@ -7,21 +7,21 @@ Format: `[version] YYYY-MM-DD — summary`
 
 ---
 
-## [1.3] 2026-05-15 — README bilingual update
-
-- Added a dedicated **Stock Analysis** section in both English and Chinese README, documenting all 8 analysis modules, usage instructions, and data sources
-- Removed outdated DCF references from the Disclaimer sections
-- Updated Core Features descriptions to reflect current functionality
-
----
-
-## [1.2] 2026-05-14 — Stock Analysis: open symbol input
+## [1.3] 2026-05-14 — Stock Analysis: open symbol input
 
 **Problem:** The Stock Analysis tab only allowed selecting symbols already present in the local trade history CSV, making it impossible to analyze stocks not currently held.
 
 **Change:**
 - Replaced the portfolio-limited `selectbox` with a **free-text input** — any publicly traded ticker (e.g. `SPY`, `NVDA`, `TSLA`) can now be analyzed regardless of trading history
 - Added a secondary **quick-pick dropdown** that still allows fast selection from held positions, with the text input taking precedence
+
+---
+
+## [1.2] 2026-05-15 — README bilingual update
+
+- Added a dedicated **Stock Analysis** section in both English and Chinese README, documenting all 8 analysis modules, usage instructions, and data sources
+- Removed outdated DCF references from the Disclaimer sections
+- Updated Core Features descriptions to reflect current functionality
 
 ---
 
@@ -71,21 +71,21 @@ Core local IBKR portfolio tracker with:
 
 ---
 
-## [1.3] 2026-05-15 — README 双语更新
-
-- 在中英文 README 中新增独立的**股票分析**章节，详细说明 8 个分析模块、使用方法及数据来源
-- 删除免责声明中过时的 DCF 相关表述
-- 更新核心功能描述，与当前实际功能保持一致
-
----
-
-## [1.2] 2026-05-14 — 股票分析：开放任意 Symbol 输入
+## [1.3] 2026-05-14 — 股票分析：开放任意 Symbol 输入
 
 **问题：** 股票分析标签页原仅限从本地交易历史 CSV 中的 Symbol 选择，无法分析未持有的股票。
 
 **变更：**
 - 将受持仓限制的下拉选择器替换为**自由文本输入框**——任意上市股票（如 `SPY`、`NVDA`、`TSLA`）均可直接输入分析，与是否有交易记录无关
 - 保留**持仓快速选择下拉**，方便快速切换已持有标的；文本框输入优先
+
+---
+
+## [1.2] 2026-05-15 — README 双语更新
+
+- 在中英文 README 中新增独立的**股票分析**章节，详细说明 8 个分析模块、使用方法及数据来源
+- 删除免责声明中过时的 DCF 相关表述
+- 更新核心功能描述，与当前实际功能保持一致
 
 ---
 
