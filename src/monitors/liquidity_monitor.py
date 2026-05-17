@@ -16,6 +16,60 @@ def _nfci_close_series(nfci_df: pd.DataFrame) -> pd.Series:
     return nfci_df["Close"]
 
 
+def _strip_tz(index: pd.Index) -> pd.DatetimeIndex:
+    """Return a tz-naive DatetimeIndex regardless of input tz state."""
+    dt = pd.to_datetime(index)
+    try:
+        return dt.tz_convert(None)
+    except Exception:
+        try:
+            return dt.tz_localize(None)
+        except Exception:
+            return dt
+
+
+def get_vix_history(period: str = "3mo") -> pd.DataFrame:
+    """VIX daily close history. Returns DataFrame(date, vix)."""
+    try:
+        hist = yf.Ticker("^VIX").history(period=period)
+        if hist is None or hist.empty:
+            raise ValueError("empty")
+        dates = _strip_tz(hist.index)
+        return pd.DataFrame({"date": dates, "vix": hist["Close"].values}).dropna()
+    except Exception:
+        return pd.DataFrame(columns=["date", "vix"])
+
+
+def get_nfci_history(period: str = "2y") -> pd.DataFrame:
+    """Chicago Fed NFCI weekly history. Returns DataFrame(date, nfci)."""
+    try:
+        raw = yf.download("NFCI", period=period, progress=False)
+        series = _nfci_close_series(raw)
+        dates = _strip_tz(series.index)
+        return pd.DataFrame({"date": dates, "nfci": series.values}).dropna()
+    except Exception:
+        return pd.DataFrame(columns=["date", "nfci"])
+
+
+def get_yield_spread_history(period: str = "1y") -> pd.DataFrame:
+    """10Y - short-term yield spread daily history. Returns DataFrame(date, spread)."""
+    try:
+        tnx_h = yf.Ticker("^TNX").history(period=period)
+        irx_h = yf.Ticker("^IRX").history(period=period)
+        if tnx_h is None or tnx_h.empty or irx_h is None or irx_h.empty:
+            raise ValueError("empty yields")
+        tnx_h.index = _strip_tz(tnx_h.index)
+        irx_h.index = _strip_tz(irx_h.index)
+        merged = tnx_h[["Close"]].rename(columns={"Close": "tnx"}).join(
+            irx_h[["Close"]].rename(columns={"Close": "irx"}), how="inner"
+        )
+        merged["spread"] = merged["tnx"] - merged["irx"]
+        dates = merged.index
+        return pd.DataFrame({"date": dates, "spread": merged["spread"].values}).dropna()
+    except Exception:
+        return pd.DataFrame(columns=["date", "spread"])
+
+
 def get_fed_net_liquidity():
     """Fed Net Liquidity - Most important liquidity indicator"""
     return {"value": 5718.0, "unit": "B USD", "trend": "Slightly Declining"}
@@ -86,7 +140,7 @@ def get_margin_indicators() -> dict:
         url = "https://api.finra.org/data/group/finra/name/debitBalancesInCustomersSecuritiesAccounts"
         resp = requests.get(
             url,
-            params={"limit": 3, "offset": 0},
+            params={"limit": 24, "offset": 0},
             headers={"Accept": "application/json"},
             timeout=15,
         )
@@ -110,11 +164,17 @@ def get_margin_indicators() -> dict:
         prev_b = _debt(data[1]) / 1000
         change_pct = round((current_b / prev_b - 1) * 100, 1) if prev_b > 0 else 0.0
         trend = "Expanding" if change_pct > 1 else ("Contracting" if change_pct < -1 else "Stable")
+        # Build chronological history list (API returns newest-first)
+        history = [
+            {"period": _period(row), "debt_B": round(_debt(row) / 1000, 1)}
+            for row in reversed(data)
+        ]
         result = {
             "margin_debt_B": round(current_b, 1),
             "margin_change_pct": change_pct,
             "margin_trend": trend,
             "margin_period": _period(data[0]),
+            "margin_history": history,
         }
         joblib.dump(result, _cache)
         return result
@@ -126,6 +186,7 @@ def get_margin_indicators() -> dict:
             "margin_change_pct": 2.1,
             "margin_trend": "Expanding",
             "margin_period": "—",
+            "margin_history": [],
         }
 
 
@@ -153,6 +214,7 @@ def get_liquidity_indicators():
             "Margin_Change_Pct": margin["margin_change_pct"],
             "Margin_Trend": margin["margin_trend"],
             "Margin_Period": margin["margin_period"],
+            "Margin_History": margin.get("margin_history", []),
             "Overall_Assessment": (
                 "Liquidity remains supportive"
                 if nfci["value"] < -0.3 and spread > 0
@@ -172,5 +234,6 @@ def get_liquidity_indicators():
             "Margin_Change_Pct": 2.1,
             "Margin_Trend": "Expanding",
             "Margin_Period": "—",
+            "Margin_History": [],
             "Overall_Assessment": "Liquidity supportive for equities",
         }

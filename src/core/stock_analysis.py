@@ -272,6 +272,7 @@ def get_earnings_momentum(ticker: yf.Ticker, info: dict) -> dict:
 def get_technicals(ticker: yf.Ticker) -> dict:
     result: dict = {
         "rsi": None,
+        "rsi_history": pd.DataFrame(),
         "macd_signal": _NA,
         "ma20": None, "ma50": None, "ma200": None,
         "price": None,
@@ -305,8 +306,23 @@ def get_technicals(ticker: yf.Ticker) -> dict:
         gain = delta.where(delta > 0, 0.0).rolling(14).mean()
         loss = (-delta.where(delta < 0, 0.0)).rolling(14).mean()
         rs = gain / loss.replace(0, np.nan)
-        rsi_val = float((100 - 100 / (1 + rs)).iloc[-1])
+        rsi_full = 100 - 100 / (1 + rs)
+        rsi_val = float(rsi_full.iloc[-1])
         result["rsi"] = round(rsi_val, 1) if math.isfinite(rsi_val) else None
+
+        # RSI history — last 6 months (~126 trading days), tz-naive dates
+        try:
+            rsi_valid = rsi_full.dropna()
+            _n_hist = min(126, len(rsi_valid))
+            rsi_slice = rsi_valid.iloc[-_n_hist:]
+            _idx = rsi_slice.index
+            try:
+                _dates = pd.to_datetime(_idx).tz_convert(None)
+            except Exception:
+                _dates = pd.to_datetime(_idx).tz_localize(None)
+            result["rsi_history"] = pd.DataFrame({"date": _dates, "rsi": rsi_slice.values})
+        except Exception:
+            pass
 
         # MACD
         ema12 = close.ewm(span=12, adjust=False).mean()

@@ -32,9 +32,9 @@ I built this tool to solve that — and more:
 - **Strict P&L Separation** — Realized and Unrealized clearly distinguished
 - **Dual Portfolio Views** — Current holdings (from Flex Open Positions) + Historical view (from trade CSV)
 - **Portfolio Chart Analysis** — Holdings pie, Unrealized P&L bar, Cost Basis vs Market Value, monthly trade activity, and realized P&L charts; isolated from cost calculation logic
-- **Liquidity Monitor** — CNN Fear & Greed + VIX + credit spreads + **NYSE margin debt** (FINRA monthly, with trend signal)
+- **Liquidity Monitor** — CNN Fear & Greed + VIX + credit spreads + NYSE margin debt (FINRA) + **interactive trend charts** for VIX / NFCI / Yield Spread / Margin Debt
 - **Daily Market Brief** — Yahoo Finance headlines + earnings calendar + key events
-- **Professional Stock Analysis** — Analyze any ticker: valuation multiples, analyst consensus, **short interest**, institutional ownership, earnings momentum, enhanced technicals, and 6-month price chart
+- **Professional Stock Analysis** — Analyze any ticker: valuation multiples, analyst consensus, short interest, institutional ownership, earnings momentum, enhanced technicals, **RSI history chart**, and 6-month price chart
 - **Full Trade History** — Filterable transaction log
 - **IBKR-Free Mode** — Liquidity, Market Brief, and Stock Analysis tabs work without any IBKR credentials
 - **Dark Professional UI** — Bloomberg-inspired dark theme throughout
@@ -219,6 +219,7 @@ The **Stock Analysis** tab lets you analyze any publicly traded stock — not li
 | **Key Fundamentals** | Gross/Op/Net margin, ROE, Revenue growth YoY, Debt/Equity |
 | **Analyst Consensus** | Overall rating badge, mean/high/low price targets, upside %, Buy/Hold/Sell distribution bar |
 | **Technical Indicators** | RSI(14) with zone label, MACD direction, Bollinger Band position, 52-week range %, relative volume, price vs MA 20/50/200 |
+| **Sentiment Indicators** | RSI(14) 6-month trend chart with overbought (>70) / oversold (<30) shaded bands and reference lines at 70 / 50 / 30 |
 | **Earnings Momentum** | Last 4 quarters EPS actual vs estimate + surprise %, next earnings date, EPS trend |
 | **Short Interest** | Short % of Float, Days to Cover (Short Ratio), Shares Short, data date |
 | **Institutional Ownership** | Top 8 institutional holders + % out |
@@ -249,6 +250,19 @@ The **Portfolio** tab contains a collapsible **Chart Analysis** section at the b
 | **Realized P&L by Symbol** | Bar chart of all realized gains and losses, sorted ascending |
 
 All chart functions live in `src/core/portfolio_charts.py` and are fully isolated from cost calculation logic — they only read pre-computed DataFrames passed in from `main.py`.
+
+---
+
+## Liquidity Indicator Trends
+
+The **Liquidity Monitor** tab includes an **Indicator Trends** expander with a 2×2 chart grid for historical context:
+
+| Chart | Source | Window |
+|-------|--------|--------|
+| **VIX** | yfinance `^VIX` | Last 90 days, with calm (20) / stress (30) reference lines |
+| **NFCI** | yfinance `NFCI` | Last 2 years weekly, with neutral (0) / loose (−0.3) lines |
+| **10Y − Short Yield Spread** | yfinance `^TNX` / `^IRX` | Last 12 months, with inversion line at 0 |
+| **NYSE Margin Debt** | FINRA monthly API | Last 24 months, bars colored red/green by MoM direction |
 
 ---
 
@@ -343,9 +357,9 @@ MIT License
 - **盈亏严格分离** — 已实现与未实现盈亏清晰展示
 - **双视图切换** — 当前持仓（来自 Flex 实时快照）+ 历史记录（来自本地 CSV）
 - **投资组合图表分析** — 持仓占比饼图、未实现盈亏柱状图、成本 vs 市值对比图、月度交易活跃度、已实现盈亏图；与成本计算逻辑完全隔离
-- **流动性监控** — CNN 恐贪指数 + VIX + 信用利差 + **纽交所保证金债务**（FINRA 月度数据，含趋势信号）
+- **流动性监控** — CNN 恐贪指数 + VIX + 信用利差 + 纽交所保证金债务（FINRA）+ **VIX / NFCI / 利差 / 保证金债务历史趋势图**
 - **每日市场简报** — Yahoo Finance 新闻 + 财报日历 + 重要事件
-- **专业股票分析** — 可分析任意 ticker：估值倍数、分析师共识、**空头兴趣**、机构持仓、盈利动量、增强技术指标及 6 个月 K 线图
+- **专业股票分析** — 可分析任意 ticker：估值倍数、分析师共识、空头兴趣、机构持仓、盈利动量、增强技术指标、**RSI 历史图**及 6 个月 K 线图
 - **完整交易记录** — 可筛选的交易流水
 - **无需 IBKR 账户** — 流动性、市场简报、股票分析三个标签页无需 IBKR 凭据即可使用
 - **专业暗色 UI** — Bloomberg 风格全局暗色主题
@@ -528,6 +542,7 @@ streamlit run main.py
 | **核心基本面** | 毛利率/营业利润率/净利率、ROE、营收同比增长、债务/权益比 |
 | **分析师共识** | 综合评级徽章、平均/最高/最低目标价、上涨空间、买入/持有/卖出分布条形图 |
 | **技术指标** | RSI(14) 及超买超卖标注、MACD 方向、布林带位置、52 周区间位置、相对成交量、价格与 MA20/50/200 偏离% |
+| **情绪指标** | RSI(14) 近 6 个月趋势图，含超买（>70）/超卖（<30）着色背景带及 70/50/30 虚线参考线 |
 | **盈利动量** | 近 4 季度 EPS 实际 vs 预期 + 超预期幅度、下次财报日期、EPS 趋势 |
 | **空头兴趣** | 空头占流通股比例、Days to Cover（空仓比率）、空头股数、数据日期 |
 | **机构持仓** | 前 8 大机构股东 + 持仓占比 |
@@ -560,6 +575,19 @@ streamlit run main.py
 | **已实现盈亏** | 全部有已实现盈亏的标的按金额升序排列 |
 
 所有图表函数位于 `src/core/portfolio_charts.py`，仅接收已算好的 DataFrame，与成本计算逻辑完全隔离。
+
+---
+
+## 流动性指标趋势图
+
+**流动性监控（Liquidity Monitor）** 标签页包含可折叠的 **Indicator Trends** 区块，以 2×2 图表网格展示各指标的历史走势：
+
+| 图表 | 数据来源 | 时间范围 |
+|------|--------|---------|
+| **VIX** | yfinance `^VIX` | 近 90 天，含平稳（20）/ 压力（30）参考线 |
+| **NFCI** | yfinance `NFCI` | 近 2 年周线，含中性（0）/ 宽松（−0.3）参考线 |
+| **10Y − 短端利差** | yfinance `^TNX` / `^IRX` | 近 12 个月，含倒挂参考线（0 轴） |
+| **纽交所保证金债务** | FINRA 月度 API | 近 24 个月，柱体按环比方向着红/绿色 |
 
 ---
 

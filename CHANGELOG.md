@@ -7,6 +7,14 @@ Format: `[version] YYYY-MM-DD — summary`
 
 ---
 
+## [1.5] 2026-05-18 — Liquidity trend charts + RSI sentiment history
+
+**Added:**
+- **Liquidity Monitor**: New history functions `get_vix_history()`, `get_nfci_history()`, `get_yield_spread_history()` in `liquidity_monitor.py`; `get_margin_indicators()` now fetches 24 months of data and returns a chronological `margin_history` list; a new **Indicator Trends** expander in the Liquidity tab shows a 2×2 chart grid — VIX 90-day line (with calm/stress reference lines at 20/30), NFCI 2-year weekly, 10Y−Short Yield Spread 12-month area chart (with inversion line at 0), and NYSE Margin Debt 24-month bar chart (bars colored red/green by MoM direction)
+- **Stock Analysis**: `get_technicals()` now computes and returns `rsi_history` — a DataFrame of the last ~126 trading days (6 months) of RSI(14) values with tz-naive dates; a new collapsible **Sentiment Indicators** expander renders the RSI history as a line chart with shaded overbought (>70) / oversold (<30) bands and dotted reference lines at 70 / 50 / 30; current RSI value and zone label (Overbought / Oversold / Neutral) displayed below the chart
+
+---
+
 ## [1.4] 2026-05-17 — Margin indicators, portfolio charts, IBKR-free mode, short interest
 
 **Added:**
@@ -78,6 +86,14 @@ Core local IBKR portfolio tracker with:
 
 本项目所有重要变更均记录于此。  
 格式：`[版本号] YYYY-MM-DD — 摘要`
+
+---
+
+## [1.5] 2026-05-18 — 流动性趋势图表 + RSI 情绪历史
+
+**新增：**
+- **流动性监控**：`liquidity_monitor.py` 新增 `get_vix_history()`、`get_nfci_history()`、`get_yield_spread_history()` 三个历史数据函数；`get_margin_indicators()` 改为拉取 24 个月数据，并在返回值中附带时间顺序的 `margin_history` 列表；Liquidity 标签页新增 **Indicator Trends** 可折叠区块，展示 2×2 图表网格——VIX 近 90 天折线图（含 20/30 平稳/压力参考线）、NFCI 近 2 年周线图、10Y−短端利差近 12 个月面积图（含 0 轴倒挂参考线）、纽交所保证金债务近 24 个月柱状图（柱体按环比方向着色红/绿）
+- **股票分析**：`get_technicals()` 新增 `rsi_history` 字段——包含近 ~126 个交易日（约 6 个月）RSI(14) 数值的 DataFrame（时区无关日期）；Stock Analysis 标签页新增可折叠的 **Sentiment Indicators** 区块，以折线图展示 RSI 历史，含超买（>70）/超卖（<30）着色背景带及 70/50/30 虚线参考线；图表下方显示当前 RSI 值及区间判断（超买 / 超卖 / 中性）
 
 ---
 

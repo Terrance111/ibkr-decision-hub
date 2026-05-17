@@ -29,7 +29,13 @@ from core.portfolio_charts import (
     monthly_trade_activity,
     cumulative_realized_pnl,
 )
-from monitors.liquidity_monitor import get_fear_greed_data, get_liquidity_indicators
+from monitors.liquidity_monitor import (
+    get_fear_greed_data,
+    get_liquidity_indicators,
+    get_vix_history,
+    get_nfci_history,
+    get_yield_spread_history,
+)
 from monitors.daily_brief import get_daily_brief
 
 # ====================== Page Config ======================
@@ -567,6 +573,127 @@ with tab2:
         unsafe_allow_html=True,
     )
 
+    # ── Indicator Trends ──
+    st.markdown("<br>", unsafe_allow_html=True)
+    with st.expander("Indicator Trends", expanded=True):
+        _vix_df = get_vix_history("3mo")
+        _nfci_df = get_nfci_history("2y")
+        _spread_df = get_yield_spread_history("1y")
+        _mg_history = indicators.get("Margin_History", [])
+
+        _liq_c1, _liq_c2 = st.columns(2)
+
+        # — VIX 90-day —
+        with _liq_c1:
+            if not _vix_df.empty:
+                _fig_vix = go.Figure()
+                _fig_vix.add_trace(go.Scatter(
+                    x=_vix_df["date"], y=_vix_df["vix"],
+                    mode="lines", line=dict(color="#f4c542", width=1.8),
+                    fill="tozeroy", fillcolor="rgba(244,197,66,0.06)",
+                    name="VIX",
+                ))
+                _fig_vix.add_hline(y=20, line_dash="dot", line_color="#00c8a0",
+                                   annotation_text="20 (calm)", annotation_font_color="#00c8a0",
+                                   annotation_position="right")
+                _fig_vix.add_hline(y=30, line_dash="dot", line_color="#ff4d6d",
+                                   annotation_text="30 (stress)", annotation_font_color="#ff4d6d",
+                                   annotation_position="right")
+                _fig_vix.update_layout(
+                    template="plotly_dark", paper_bgcolor="#0a0e1a", plot_bgcolor="#0f1525",
+                    title=dict(text="VIX — Last 90 Days", font=dict(color="#c8d4e8", size=12)),
+                    xaxis=dict(gridcolor="#1e2a42", color="#7a8fb5"),
+                    yaxis=dict(gridcolor="#1e2a42", color="#7a8fb5"),
+                    margin=dict(l=10, r=40, t=36, b=10), height=220, showlegend=False,
+                )
+                st.plotly_chart(_fig_vix, use_container_width=True)
+            else:
+                st.caption("VIX history unavailable.")
+
+        # — NFCI 2-year —
+        with _liq_c2:
+            if not _nfci_df.empty:
+                _fig_nfci = go.Figure()
+                _fig_nfci.add_trace(go.Scatter(
+                    x=_nfci_df["date"], y=_nfci_df["nfci"],
+                    mode="lines", line=dict(color="#00c8a0", width=1.8),
+                    name="NFCI",
+                ))
+                _fig_nfci.add_hline(y=0, line_dash="dot", line_color="#7a8fb5",
+                                    annotation_text="0 (neutral)", annotation_font_color="#7a8fb5",
+                                    annotation_position="right")
+                _fig_nfci.add_hline(y=-0.3, line_dash="dot", line_color="#00c8a0",
+                                    annotation_text="-0.3 (loose)", annotation_font_color="#00c8a0",
+                                    annotation_position="right")
+                _fig_nfci.update_layout(
+                    template="plotly_dark", paper_bgcolor="#0a0e1a", plot_bgcolor="#0f1525",
+                    title=dict(text="NFCI — Last 2 Years", font=dict(color="#c8d4e8", size=12)),
+                    xaxis=dict(gridcolor="#1e2a42", color="#7a8fb5"),
+                    yaxis=dict(gridcolor="#1e2a42", color="#7a8fb5"),
+                    margin=dict(l=10, r=50, t=36, b=10), height=220, showlegend=False,
+                )
+                st.plotly_chart(_fig_nfci, use_container_width=True)
+            else:
+                st.caption("NFCI history unavailable.")
+
+        _liq_c3, _liq_c4 = st.columns(2)
+
+        # — Yield Spread 12-month —
+        with _liq_c3:
+            if not _spread_df.empty:
+                _spread_color = [
+                    "#ff4d6d" if v < 0 else "#00c8a0" for v in _spread_df["spread"]
+                ]
+                _fig_spread = go.Figure()
+                _fig_spread.add_trace(go.Scatter(
+                    x=_spread_df["date"], y=_spread_df["spread"],
+                    mode="lines", line=dict(color="#7a8fb5", width=1.8),
+                    fill="tozeroy", fillcolor="rgba(122,143,181,0.07)",
+                    name="Spread",
+                ))
+                _fig_spread.add_hline(y=0, line_dash="dot", line_color="#ff4d6d",
+                                      annotation_text="0 (inversion)", annotation_font_color="#ff4d6d",
+                                      annotation_position="right")
+                _fig_spread.update_layout(
+                    template="plotly_dark", paper_bgcolor="#0a0e1a", plot_bgcolor="#0f1525",
+                    title=dict(text="10Y − Short Yield Spread — Last 12 Mo", font=dict(color="#c8d4e8", size=12)),
+                    xaxis=dict(gridcolor="#1e2a42", color="#7a8fb5"),
+                    yaxis=dict(gridcolor="#1e2a42", color="#7a8fb5", title="%"),
+                    margin=dict(l=10, r=60, t=36, b=10), height=220, showlegend=False,
+                )
+                st.plotly_chart(_fig_spread, use_container_width=True)
+            else:
+                st.caption("Yield spread history unavailable.")
+
+        # — Margin Debt monthly bar —
+        with _liq_c4:
+            if _mg_history:
+                _mg_hist_df = pd.DataFrame(_mg_history)
+                _mg_hist_df = _mg_hist_df.dropna(subset=["debt_B"])
+                # Color bars by MoM direction
+                _mg_colors = ["#c8d4e8"]
+                for i in range(1, len(_mg_hist_df)):
+                    prev = _mg_hist_df["debt_B"].iloc[i - 1]
+                    curr = _mg_hist_df["debt_B"].iloc[i]
+                    _mg_colors.append("#ff4d6d" if curr > prev else "#00c8a0")
+                _fig_mg = go.Figure(go.Bar(
+                    x=_mg_hist_df["period"],
+                    y=_mg_hist_df["debt_B"],
+                    marker_color=_mg_colors,
+                    marker_opacity=0.85,
+                    hovertemplate="<b>%{x}</b><br>$%{y}B<extra></extra>",
+                ))
+                _fig_mg.update_layout(
+                    template="plotly_dark", paper_bgcolor="#0a0e1a", plot_bgcolor="#0f1525",
+                    title=dict(text="NYSE Margin Debt — Monthly ($B)", font=dict(color="#c8d4e8", size=12)),
+                    xaxis=dict(gridcolor="#1e2a42", color="#7a8fb5", tickangle=-45),
+                    yaxis=dict(gridcolor="#1e2a42", color="#7a8fb5", title="$B"),
+                    margin=dict(l=10, r=10, t=36, b=10), height=220, showlegend=False,
+                )
+                st.plotly_chart(_fig_mg, use_container_width=True)
+            else:
+                st.caption("Margin debt history unavailable.")
+
 # ─────────────────────────────────────────────────────
 # TAB 3 — Daily Market Brief
 # ─────────────────────────────────────────────────────
@@ -927,6 +1054,71 @@ with tab5:
                     "</div>",
                     unsafe_allow_html=True,
                 )
+
+            # ── Sentiment Indicators (RSI history) ──
+            _rsi_hist = tech.get("rsi_history", pd.DataFrame())
+            if not _rsi_hist.empty:
+                st.markdown("<br>", unsafe_allow_html=True)
+                with st.expander("Sentiment Indicators — RSI History", expanded=False):
+                    _fig_rsi = go.Figure()
+                    _rsi_vals = _rsi_hist["rsi"].values
+                    _rsi_dates = _rsi_hist["date"]
+
+                    # Dynamic line color: overbought red, oversold green, neutral yellow
+                    _rsi_line_color = (
+                        "#ff4d6d" if float(_rsi_vals[-1]) > 70
+                        else "#00c8a0" if float(_rsi_vals[-1]) < 30
+                        else "#f4c542"
+                    )
+                    _fig_rsi.add_trace(go.Scatter(
+                        x=_rsi_dates, y=_rsi_vals,
+                        mode="lines",
+                        line=dict(color=_rsi_line_color, width=2),
+                        name="RSI(14)",
+                        hovertemplate="<b>%{x|%Y-%m-%d}</b><br>RSI: %{y:.1f}<extra></extra>",
+                    ))
+                    # Reference bands
+                    _fig_rsi.add_hrect(y0=70, y1=100, fillcolor="rgba(255,77,109,0.07)",
+                                       line_width=0, annotation_text="Overbought",
+                                       annotation_position="top left",
+                                       annotation_font=dict(color="#ff4d6d", size=10))
+                    _fig_rsi.add_hrect(y0=0, y1=30, fillcolor="rgba(0,200,160,0.07)",
+                                       line_width=0, annotation_text="Oversold",
+                                       annotation_position="bottom left",
+                                       annotation_font=dict(color="#00c8a0", size=10))
+                    _fig_rsi.add_hline(y=70, line_dash="dot", line_color="#ff4d6d",
+                                       line_width=1, opacity=0.6)
+                    _fig_rsi.add_hline(y=50, line_dash="dot", line_color="#7a8fb5",
+                                       line_width=1, opacity=0.4)
+                    _fig_rsi.add_hline(y=30, line_dash="dot", line_color="#00c8a0",
+                                       line_width=1, opacity=0.6)
+                    _fig_rsi.update_layout(
+                        template="plotly_dark",
+                        paper_bgcolor="#0a0e1a",
+                        plot_bgcolor="#0f1525",
+                        title=dict(
+                            text=f"RSI(14) — {selected_symbol} — Last 6 Months",
+                            font=dict(color="#c8d4e8", size=13),
+                        ),
+                        xaxis=dict(gridcolor="#1e2a42", color="#7a8fb5"),
+                        yaxis=dict(gridcolor="#1e2a42", color="#7a8fb5",
+                                   range=[0, 100], title="RSI"),
+                        margin=dict(l=10, r=10, t=40, b=10),
+                        height=260,
+                        showlegend=False,
+                    )
+                    st.plotly_chart(_fig_rsi, use_container_width=True)
+                    _cur_rsi = tech.get("rsi")
+                    if _cur_rsi is not None:
+                        _rsi_zone = "Overbought" if _cur_rsi > 70 else ("Oversold" if _cur_rsi < 30 else "Neutral")
+                        _zone_color = "#ff4d6d" if _cur_rsi > 70 else ("#00c8a0" if _cur_rsi < 30 else "#f4c542")
+                        st.markdown(
+                            f"<div style='color:#4a5a78;font-size:0.72rem;margin-top:4px'>"
+                            f"Current RSI: <span style='color:{_zone_color};font-weight:600'>{_cur_rsi} — {_rsi_zone}</span>. "
+                            f"RSI &gt; 70 = overbought territory; RSI &lt; 30 = oversold territory."
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
 
             # ── Row 4: Price chart ──
             st.markdown("<br>", unsafe_allow_html=True)
