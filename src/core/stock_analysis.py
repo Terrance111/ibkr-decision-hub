@@ -349,6 +349,35 @@ def get_technicals(ticker: yf.Ticker) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Short interest
+# ─────────────────────────────────────────────────────────────────────────────
+
+def get_short_interest(info: dict) -> dict:
+    """Short interest metrics from yfinance info (individual stock leverage proxy)."""
+    short_pct = info.get("shortPercentOfFloat")
+    short_ratio = info.get("shortRatio")
+    shares_short = info.get("sharesShort")
+    date_short = info.get("dateShortInterest")
+
+    date_str = _NA
+    if date_short:
+        try:
+            date_str = pd.Timestamp(date_short, unit="s").strftime("%Y-%m-%d")
+        except Exception:
+            try:
+                date_str = pd.Timestamp(date_short).strftime("%Y-%m-%d")
+            except Exception:
+                date_str = _NA
+
+    return {
+        "short_pct_float": round(float(short_pct) * 100, 2) if short_pct is not None else None,
+        "short_ratio": round(float(short_ratio), 2) if short_ratio is not None else None,
+        "shares_short": int(shares_short) if shares_short is not None else None,
+        "date": date_str,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -377,6 +406,7 @@ def get_stock_analysis(symbol: str) -> dict:
         "institutional": get_institutional_data(ticker) if ticker else {},
         "earnings": get_earnings_momentum(ticker, info) if ticker else {},
         "technicals": get_technicals(ticker) if ticker else {},
+        "short_interest": get_short_interest(info),
         "error": None,
     }
 

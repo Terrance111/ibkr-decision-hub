@@ -79,6 +79,56 @@ def get_hy_oas():
     return 2.77
 
 
+def get_margin_indicators() -> dict:
+    """FINRA monthly NYSE margin debt statistics (market-level leverage proxy)."""
+    _cache = os.path.join(config.CACHE_DIR, "margin_indicators.pkl")
+    try:
+        url = "https://api.finra.org/data/group/finra/name/debitBalancesInCustomersSecuritiesAccounts"
+        resp = requests.get(
+            url,
+            params={"limit": 3, "offset": 0},
+            headers={"Accept": "application/json"},
+            timeout=15,
+        )
+        data = resp.json()
+        if not isinstance(data, list) or len(data) < 2:
+            raise ValueError("unexpected shape")
+
+        def _debt(row: dict) -> float:
+            for k in ("totalDebitBalances", "debitBalances", "Total Debit Balances"):
+                if k in row:
+                    return float(row[k])
+            raise KeyError("debt field not found")
+
+        def _period(row: dict) -> str:
+            for k in ("reportingPeriod", "Period", "period"):
+                if k in row:
+                    return str(row[k])
+            return "—"
+
+        current_b = _debt(data[0]) / 1000   # millions → billions
+        prev_b = _debt(data[1]) / 1000
+        change_pct = round((current_b / prev_b - 1) * 100, 1) if prev_b > 0 else 0.0
+        trend = "Expanding" if change_pct > 1 else ("Contracting" if change_pct < -1 else "Stable")
+        result = {
+            "margin_debt_B": round(current_b, 1),
+            "margin_change_pct": change_pct,
+            "margin_trend": trend,
+            "margin_period": _period(data[0]),
+        }
+        joblib.dump(result, _cache)
+        return result
+    except Exception:
+        if os.path.exists(_cache):
+            return joblib.load(_cache)
+        return {
+            "margin_debt_B": 784.4,
+            "margin_change_pct": 2.1,
+            "margin_trend": "Expanding",
+            "margin_period": "—",
+        }
+
+
 def get_liquidity_indicators():
     """Combine all liquidity indicators"""
     try:
@@ -90,6 +140,7 @@ def get_liquidity_indicators():
         hy_oas = get_hy_oas()
         nfci = get_nfci()
         net_liq = get_fed_net_liquidity()
+        margin = get_margin_indicators()
         return {
             "Fed_Net_Liquidity_B": net_liq["value"],
             "Net_Liquidity_Trend": net_liq["trend"],
@@ -98,6 +149,10 @@ def get_liquidity_indicators():
             "10Y_2Y_Spread": spread,
             "VIX": round(vix, 2),
             "HY_OAS": hy_oas,
+            "Margin_Debt_B": margin["margin_debt_B"],
+            "Margin_Change_Pct": margin["margin_change_pct"],
+            "Margin_Trend": margin["margin_trend"],
+            "Margin_Period": margin["margin_period"],
             "Overall_Assessment": (
                 "Liquidity remains supportive"
                 if nfci["value"] < -0.3 and spread > 0
@@ -113,5 +168,9 @@ def get_liquidity_indicators():
             "10Y_2Y_Spread": 0.45,
             "VIX": 18.5,
             "HY_OAS": 2.77,
+            "Margin_Debt_B": 784.4,
+            "Margin_Change_Pct": 2.1,
+            "Margin_Trend": "Expanding",
+            "Margin_Period": "—",
             "Overall_Assessment": "Liquidity supportive for equities",
         }

@@ -22,6 +22,13 @@ from data.ibkr_account import (
 from core.trade_processor import process_trades
 from core.market_data import get_prices_for_portfolio
 from core.stock_analysis import get_stock_analysis
+from core.portfolio_charts import (
+    holdings_pie,
+    pnl_bar,
+    cost_vs_mv_bar,
+    monthly_trade_activity,
+    cumulative_realized_pnl,
+)
 from monitors.liquidity_monitor import get_fear_greed_data, get_liquidity_indicators
 from monitors.daily_brief import get_daily_brief
 
@@ -245,18 +252,33 @@ with st.sidebar:
 # ====================== Load Data ======================
 _flex_full_refresh = st.session_state.pop("_ibkr_flex_full_refresh", False)
 _trade_start_override = st.session_state.pop("_trade_start_date_override", None)
+
 if "trades" not in st.session_state:
-    st.session_state.trades = fetch_ibkr_trades(
-        force_full=_flex_full_refresh,
-        start_date_override=_trade_start_override,
-    )
+    try:
+        st.session_state.trades = fetch_ibkr_trades(
+            force_full=_flex_full_refresh,
+            start_date_override=_trade_start_override,
+        )
+    except Exception:
+        st.session_state.trades = pd.DataFrame()
+
 if "account_data" not in st.session_state:
-    st.session_state.account_data = fetch_ibkr_positions_and_cash(flex_refresh=_flex_full_refresh)
+    try:
+        st.session_state.account_data = fetch_ibkr_positions_and_cash(flex_refresh=_flex_full_refresh)
+    except Exception:
+        st.session_state.account_data = {
+            "cash_balance": 0.0,
+            "positions_flex_df": None,
+            "positions_market_value_total": 0.0,
+            "positions_flex_warning": None,
+            "positions": {},
+        }
 
 trades = st.session_state.trades
-portfolio = process_trades(trades)
+ibkr_available = trades is not None and not trades.empty
+portfolio = process_trades(trades) if ibkr_available else {}
 account = st.session_state.account_data
-cash_balance = account["cash_balance"]
+cash_balance = float(account.get("cash_balance", 0.0))
 
 # ====================== Stale Data Warning ======================
 _trade_max_date = pd.to_datetime(
@@ -286,7 +308,24 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 # TAB 1 — Portfolio Analysis
 # ─────────────────────────────────────────────────────
 with tab1:
-    if view_mode == "Current Holdings":
+    if not ibkr_available:
+        st.markdown(
+            "<div style='background:#141a2e;border:1px solid #1e2a42;border-radius:10px;"
+            "padding:32px;margin:24px 0;text-align:center'>"
+            "<div style='font-size:2rem;margin-bottom:10px'>⚡</div>"
+            "<div style='color:#e8ecf0;font-weight:700;font-size:1.05rem;margin-bottom:8px'>"
+            "IBKR Data Not Available</div>"
+            "<div style='color:#7a8fb5;font-size:0.85rem;line-height:1.6'>"
+            "Set <code>IBKR_FLEX_TOKEN</code>, <code>IBKR_FLEX_QUERY_ID</code>, and "
+            "<code>IBKR_FLEX_POSITIONS_QUERY_ID</code> in your <code>.env</code> file, "
+            "then click <strong style='color:#00c8a0'>↺ Refresh</strong> in the sidebar."
+            "</div>"
+            "<div style='color:#4a5a78;font-size:0.78rem;margin-top:10px'>"
+            "Liquidity, Market Brief, and Stock Analysis tabs are fully available without IBKR credentials."
+            "</div></div>",
+            unsafe_allow_html=True,
+        )
+    elif view_mode == "Current Holdings":
         wmsg = account.get("positions_flex_warning")
         if wmsg:
             st.warning(wmsg)
@@ -411,6 +450,37 @@ with tab1:
             )
             st.dataframe(closed_sty, use_container_width=True, hide_index=True)
 
+    # ── Chart Analysis expander (visible when IBKR data is loaded) ──
+    if ibkr_available:
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.expander("Chart Analysis", expanded=False):
+            if view_mode == "Current Holdings":
+                _pflex_chart = account.get("positions_flex_df")
+                if _pflex_chart is not None and not _pflex_chart.empty:
+                    _enriched_chart = enrich_positions_with_trade_cost(_pflex_chart, portfolio)
+                    _c1, _c2 = st.columns([1, 1])
+                    with _c1:
+                        _fig = holdings_pie(_enriched_chart)
+                        if _fig:
+                            st.plotly_chart(_fig, use_container_width=True)
+                    with _c2:
+                        _fig = pnl_bar(_enriched_chart)
+                        if _fig:
+                            st.plotly_chart(_fig, use_container_width=True)
+                    _fig = cost_vs_mv_bar(_enriched_chart)
+                    if _fig:
+                        st.plotly_chart(_fig, use_container_width=True)
+            else:
+                _c1, _c2 = st.columns([1, 1])
+                with _c1:
+                    _fig = monthly_trade_activity(trades)
+                    if _fig:
+                        st.plotly_chart(_fig, use_container_width=True)
+                with _c2:
+                    _fig = cumulative_realized_pnl(portfolio)
+                    if _fig:
+                        st.plotly_chart(_fig, use_container_width=True)
+
 # ─────────────────────────────────────────────────────
 # TAB 2 — Liquidity Monitor
 # ─────────────────────────────────────────────────────
@@ -465,6 +535,38 @@ with tab2:
     c1.metric("High Yield OAS", f"{indicators['HY_OAS']}%")
     c2.metric("Overall Assessment", indicators["Overall_Assessment"])
 
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("<div class='section-header'>Margin & Leverage (NYSE Market Debt)</div>", unsafe_allow_html=True)
+    _mg = indicators
+    _mg_period = _mg.get("Margin_Period", "—")
+    _mg_trend_color = "#ff4d6d" if _mg.get("Margin_Trend") == "Expanding" else ("#00c8a0" if _mg.get("Margin_Trend") == "Contracting" else "#f4c542")
+    mc1, mc2, mc3 = st.columns(3)
+    mc1.metric(
+        f"Margin Debt  ({_mg_period})",
+        f"${_mg.get('Margin_Debt_B', '—')}B",
+    )
+    mc2.metric(
+        "MoM Change",
+        f"{_mg.get('Margin_Change_Pct', '—'):+.1f}%" if isinstance(_mg.get("Margin_Change_Pct"), (int, float)) else "—",
+    )
+    with mc3:
+        _trend = _mg.get("Margin_Trend", "—")
+        st.markdown(
+            f"<div style='background:#141a2e;border:1px solid #1e2a42;border-radius:8px;"
+            f"padding:14px 18px 10px 18px'>"
+            f"<div style='color:#7a8fb5;font-size:0.78rem;letter-spacing:0.04em'>Trend</div>"
+            f"<div style='color:{_mg_trend_color};font-size:1.4rem;font-weight:700;margin-top:4px'>{_trend}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    st.markdown(
+        "<div style='color:#4a5a78;font-size:0.72rem;margin-top:6px'>"
+        "Source: FINRA monthly margin statistics. Expanding margin debt signals rising leverage; "
+        "sharp contractions often precede deleveraging events."
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
 # ─────────────────────────────────────────────────────
 # TAB 3 — Daily Market Brief
 # ─────────────────────────────────────────────────────
@@ -489,17 +591,26 @@ with tab3:
 # ─────────────────────────────────────────────────────
 with tab4:
     st.markdown("<div class='section-header'>Trade History</div>", unsafe_allow_html=True)
-    th_display = _trade_history_display(trades)
-    sym_opts = ["All"] + sorted(th_display["Symbol"].dropna().unique().tolist())
-    symbol_filter = st.selectbox("Filter by Symbol", sym_opts, label_visibility="collapsed")
-    if symbol_filter == "All":
-        st.dataframe(th_display, use_container_width=True, hide_index=True)
-    else:
-        st.dataframe(
-            th_display[th_display["Symbol"] == symbol_filter].reset_index(drop=True),
-            use_container_width=True,
-            hide_index=True,
+    if not ibkr_available:
+        st.markdown(
+            "<div style='background:#141a2e;border:1px solid #1e2a42;border-radius:10px;"
+            "padding:24px;text-align:center;color:#7a8fb5'>"
+            "Trade history requires IBKR credentials. Configure your <code>.env</code> and click "
+            "<strong style='color:#00c8a0'>↺ Refresh</strong>.</div>",
+            unsafe_allow_html=True,
         )
+    else:
+        th_display = _trade_history_display(trades)
+        sym_opts = ["All"] + sorted(th_display["Symbol"].dropna().unique().tolist())
+        symbol_filter = st.selectbox("Filter by Symbol", sym_opts, label_visibility="collapsed")
+        if symbol_filter == "All":
+            st.dataframe(th_display, use_container_width=True, hide_index=True)
+        else:
+            st.dataframe(
+                th_display[th_display["Symbol"] == symbol_filter].reset_index(drop=True),
+                use_container_width=True,
+                hide_index=True,
+            )
 
 
 # ─────────────────────────────────────────────────────
@@ -781,6 +892,39 @@ with tab5:
                     f"<div style='color:{dir_color};font-weight:700;font-size:0.85rem;margin-top:4px'>{insider_dir}</div>"
                     f"<div style='color:#4a5a78;font-size:0.7rem;margin-top:4px'>Last 90 days</div>"
                     f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+            # ── Short Interest ──
+            _si = analysis.get("short_interest", {})
+            _si_pct = _si.get("short_pct_float")
+            _si_ratio = _si.get("short_ratio")
+            _si_shares = _si.get("shares_short")
+            _si_date = _si.get("date", "—")
+            if any(v is not None for v in [_si_pct, _si_ratio, _si_shares]):
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("<div class='section-header'>Short Interest</div>", unsafe_allow_html=True)
+                si_c1, si_c2, si_c3, si_c4 = st.columns(4)
+                _si_pct_color = "#ff4d6d" if (_si_pct or 0) > 15 else ("#f4c542" if (_si_pct or 0) > 8 else "#00c8a0")
+                with si_c1:
+                    st.markdown(
+                        f"<div style='background:#141a2e;border:1px solid #1e2a42;border-radius:8px;padding:14px 18px 10px 18px'>"
+                        f"<div style='color:#7a8fb5;font-size:0.78rem;letter-spacing:0.04em'>Short % of Float</div>"
+                        f"<div style='color:{_si_pct_color};font-size:1.5rem;font-weight:700;margin-top:4px'>"
+                        f"{'—' if _si_pct is None else f'{_si_pct:.2f}%'}</div></div>",
+                        unsafe_allow_html=True,
+                    )
+                si_c2.metric("Days to Cover", f"{'—' if _si_ratio is None else f'{_si_ratio:.1f}d'}")
+                si_c3.metric(
+                    "Shares Short",
+                    f"{'—' if _si_shares is None else (f'{_si_shares/1e6:.1f}M' if _si_shares >= 1_000_000 else f'{_si_shares:,}')}"
+                )
+                si_c4.metric("As of", _si_date)
+                st.markdown(
+                    "<div style='color:#4a5a78;font-size:0.72rem;margin-top:4px'>"
+                    "High short % (&gt;15%) may indicate bearish sentiment or squeeze potential. "
+                    "Days to Cover = Shares Short / Avg Daily Volume."
+                    "</div>",
                     unsafe_allow_html=True,
                 )
 
