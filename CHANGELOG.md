@@ -7,6 +7,16 @@ Format: `[version] YYYY-MM-DD — summary`
 
 ---
 
+## [1.4] 2026-05-17 — Margin indicators, portfolio charts, IBKR-free mode, short interest
+
+**Added:**
+- **Liquidity Monitor**: `get_margin_indicators()` in `liquidity_monitor.py` — fetches FINRA monthly NYSE margin debt via HTTP with joblib cache fallback; adds a "Margin & Leverage" section to the Liquidity tab showing debt level (in $B), MoM change %, and Expanding / Contracting / Stable trend signal
+- **Stock Analysis**: `get_short_interest()` in `stock_analysis.py` — reads Short % of Float, Days to Cover, Shares Short, and data date from yfinance; displayed as a dedicated row between Institutional Ownership and the price chart
+- **Portfolio Charts**: new `src/core/portfolio_charts.py` module with five chart functions (holdings pie, unrealized P&L bar, cost vs MV grouped bar, monthly trade activity, cumulative realized P&L); all functions accept pre-computed DataFrames only — no calculation logic inside; accessible via the collapsible "Chart Analysis" expander at the bottom of the Portfolio tab
+- **IBKR-Free Mode**: IBKR data loading is now wrapped in try/except; `ibkr_available` flag controls which tabs require credentials; Portfolio and Trade History tabs show a friendly setup prompt when unconfigured; Liquidity, Market Brief, and Stock Analysis remain fully functional without any IBKR credentials
+
+---
+
 ## [1.3] 2026-05-15 — Stock Analysis: open symbol input
 
 **Problem:** The Stock Analysis tab only allowed selecting symbols already present in the local trade history CSV, making it impossible to analyze stocks not currently held.
@@ -68,6 +78,16 @@ Core local IBKR portfolio tracker with:
 
 本项目所有重要变更均记录于此。  
 格式：`[版本号] YYYY-MM-DD — 摘要`
+
+---
+
+## [1.4] 2026-05-17 — 保证金指标、持仓图表、无 IBKR 模式、空头兴趣
+
+**新增：**
+- **流动性监控**：`liquidity_monitor.py` 新增 `get_margin_indicators()` — 通过 HTTP 拉取 FINRA 月度纽交所保证金债务数据，含 joblib 缓存 fallback；Liquidity 标签页新增"Margin & Leverage"区块，展示债务规模（亿美元）、环比变化 % 及 Expanding / Contracting / Stable 趋势信号
+- **股票分析**：`stock_analysis.py` 新增 `get_short_interest()` — 从 yfinance 读取空头占比、Days to Cover、空头股数及数据日期；在机构持仓与价格图之间新增专属展示行
+- **投资组合图表**：新建 `src/core/portfolio_charts.py`，包含 5 个图表函数（持仓占比饼图、未实现盈亏柱状图、成本 vs 市值对比、月度交易活跃度、已实现盈亏柱状图）；所有函数仅接收已算好的 DataFrame，与成本计算逻辑完全隔离；通过 Portfolio 标签页底部可折叠的"Chart Analysis"区块访问
+- **无 IBKR 降级模式**：IBKR 数据加载已包裹在 try/except 中；`ibkr_available` 标志控制各标签页的凭据依赖；未配置时 Portfolio 和 Trade History 标签页显示友好的设置引导；Liquidity、Market Brief、Stock Analysis 三个标签页无需任何 IBKR 凭据即可正常使用
 
 ---
 

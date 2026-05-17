@@ -31,10 +31,12 @@ I built this tool to solve that — and more:
 - **True Diluted Cost Basis** — Net cash-flow method that properly reflects wave trading
 - **Strict P&L Separation** — Realized and Unrealized clearly distinguished
 - **Dual Portfolio Views** — Current holdings (from Flex Open Positions) + Historical view (from trade CSV)
-- **Liquidity Monitor** — CNN Fear & Greed + VIX + credit spread proxies
+- **Portfolio Chart Analysis** — Holdings pie, Unrealized P&L bar, Cost Basis vs Market Value, monthly trade activity, and realized P&L charts; isolated from cost calculation logic
+- **Liquidity Monitor** — CNN Fear & Greed + VIX + credit spreads + **NYSE margin debt** (FINRA monthly, with trend signal)
 - **Daily Market Brief** — Yahoo Finance headlines + earnings calendar + key events
-- **Professional Stock Analysis** — Analyze any ticker: valuation multiples, analyst consensus, institutional ownership, earnings momentum, enhanced technicals, and 6-month price chart
+- **Professional Stock Analysis** — Analyze any ticker: valuation multiples, analyst consensus, **short interest**, institutional ownership, earnings momentum, enhanced technicals, and 6-month price chart
 - **Full Trade History** — Filterable transaction log
+- **IBKR-Free Mode** — Liquidity, Market Brief, and Stock Analysis tabs work without any IBKR credentials
 - **Dark Professional UI** — Bloomberg-inspired dark theme throughout
 
 ---
@@ -53,7 +55,7 @@ I built this tool to solve that — and more:
 ├── cache/                      # Runtime cache (trade_history.csv, snapshots, etc.)
 └── src/
     ├── data/                   # ibkr_fetch.py · ibkr_account.py · flex_report.py
-    ├── core/                   # trade_processor.py · market_data.py · stock_analysis.py
+    ├── core/                   # trade_processor.py · market_data.py · stock_analysis.py · portfolio_charts.py
     ├── monitors/               # liquidity_monitor.py · daily_brief.py
     └── utils/
 ```
@@ -218,11 +220,35 @@ The **Stock Analysis** tab lets you analyze any publicly traded stock — not li
 | **Analyst Consensus** | Overall rating badge, mean/high/low price targets, upside %, Buy/Hold/Sell distribution bar |
 | **Technical Indicators** | RSI(14) with zone label, MACD direction, Bollinger Band position, 52-week range %, relative volume, price vs MA 20/50/200 |
 | **Earnings Momentum** | Last 4 quarters EPS actual vs estimate + surprise %, next earnings date, EPS trend |
+| **Short Interest** | Short % of Float, Days to Cover (Short Ratio), Shares Short, data date |
 | **Institutional Ownership** | Top 8 institutional holders + % out |
 | **Insider Activity** | Net insider direction over last 90 days (Net Buying / Selling / Mixed) |
 | **Price Chart** | 6-month candlestick with MA20 / MA50 overlays |
 
 All data is sourced from yfinance at analysis time — no extra API keys required.
+
+---
+
+## Portfolio Chart Analysis
+
+The **Portfolio** tab contains a collapsible **Chart Analysis** section at the bottom. Charts automatically switch based on the active view:
+
+**Current Holdings view:**
+
+| Chart | Description |
+|-------|-------------|
+| **Holdings Pie** | Donut chart of each position's share of total market value |
+| **Unrealized P&L Bar** | Horizontal bar per symbol, green for gains / red for losses |
+| **Cost Basis vs Market Value** | Grouped bars showing entry cost vs current market value side-by-side |
+
+**All Historical Holdings view:**
+
+| Chart | Description |
+|-------|-------------|
+| **Monthly Trade Activity** | Bar chart of number of trades executed per calendar month |
+| **Realized P&L by Symbol** | Bar chart of all realized gains and losses, sorted ascending |
+
+All chart functions live in `src/core/portfolio_charts.py` and are fully isolated from cost calculation logic — they only read pre-computed DataFrames passed in from `main.py`.
 
 ---
 
@@ -316,10 +342,12 @@ MIT License
 - **真实摊薄成本** — 净现金流法，正确反映波段交易收益
 - **盈亏严格分离** — 已实现与未实现盈亏清晰展示
 - **双视图切换** — 当前持仓（来自 Flex 实时快照）+ 历史记录（来自本地 CSV）
-- **流动性监控** — CNN 恐贪指数 + VIX + 信用利差代理
+- **投资组合图表分析** — 持仓占比饼图、未实现盈亏柱状图、成本 vs 市值对比图、月度交易活跃度、已实现盈亏图；与成本计算逻辑完全隔离
+- **流动性监控** — CNN 恐贪指数 + VIX + 信用利差 + **纽交所保证金债务**（FINRA 月度数据，含趋势信号）
 - **每日市场简报** — Yahoo Finance 新闻 + 财报日历 + 重要事件
-- **专业股票分析** — 可分析任意 ticker：估值倍数、分析师共识、机构持仓、盈利动量、增强技术指标及 6 个月 K 线图
+- **专业股票分析** — 可分析任意 ticker：估值倍数、分析师共识、**空头兴趣**、机构持仓、盈利动量、增强技术指标及 6 个月 K 线图
 - **完整交易记录** — 可筛选的交易流水
+- **无需 IBKR 账户** — 流动性、市场简报、股票分析三个标签页无需 IBKR 凭据即可使用
 - **专业暗色 UI** — Bloomberg 风格全局暗色主题
 
 ---
@@ -338,7 +366,7 @@ MIT License
 ├── cache/                      # 运行时缓存（trade_history.csv、快照等）
 └── src/
     ├── data/                   # ibkr_fetch.py · ibkr_account.py · flex_report.py
-    ├── core/                   # trade_processor.py · market_data.py · stock_analysis.py
+    ├── core/                   # trade_processor.py · market_data.py · stock_analysis.py · portfolio_charts.py
     ├── monitors/               # liquidity_monitor.py · daily_brief.py
     └── utils/
 ```
@@ -501,6 +529,7 @@ streamlit run main.py
 | **分析师共识** | 综合评级徽章、平均/最高/最低目标价、上涨空间、买入/持有/卖出分布条形图 |
 | **技术指标** | RSI(14) 及超买超卖标注、MACD 方向、布林带位置、52 周区间位置、相对成交量、价格与 MA20/50/200 偏离% |
 | **盈利动量** | 近 4 季度 EPS 实际 vs 预期 + 超预期幅度、下次财报日期、EPS 趋势 |
+| **空头兴趣** | 空头占流通股比例、Days to Cover（空仓比率）、空头股数、数据日期 |
 | **机构持仓** | 前 8 大机构股东 + 持仓占比 |
 | **内部人士动向** | 近 90 天净买入/卖出/混合 |
 | **价格走势图** | 6 个月 K 线图叠加 MA20/MA50 |
@@ -508,6 +537,29 @@ streamlit run main.py
 所有数据在点击分析时通过 yfinance 实时获取，无需额外 API Key。
 
 首次运行时，App 会从 `IBKR_TRADE_HISTORY_START_DATE` 到昨天，分多个 364 天的时间段拉取全量历史。后续刷新仅增量拉取最新日期之后的数据。
+
+---
+
+## 投资组合图表分析
+
+**Portfolio** 标签页底部新增可折叠的 **Chart Analysis** 区块，图表随当前视图自动切换：
+
+**当前持仓（Current Holdings）视图：**
+
+| 图表 | 说明 |
+|------|------|
+| **持仓占比饼图** | 甜甜圈图，展示各标的市值占总持仓的比例 |
+| **未实现盈亏柱状图** | 横向柱状图，正值绿色 / 负值红色 |
+| **成本 vs 市值对比** | 分组竖柱，每个标的并列显示入场成本与当前市值 |
+
+**全部历史持仓（All Historical Holdings）视图：**
+
+| 图表 | 说明 |
+|------|------|
+| **月度交易活跃度** | 每个自然月执行的交易笔数柱状图 |
+| **已实现盈亏** | 全部有已实现盈亏的标的按金额升序排列 |
+
+所有图表函数位于 `src/core/portfolio_charts.py`，仅接收已算好的 DataFrame，与成本计算逻辑完全隔离。
 
 ---
 
